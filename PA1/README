@@ -115,3 +115,73 @@ Instructions
 Write-up for PA1J
 -----------------
 
+I'm breaking this project into several components.
+
+Part 1)
+Regex matching
+We define regex to catch input tokens in the appropriate order, and 
+raise a flag when an invalid input is detected.
+
+Special cases to considered are the STRING and COMMENT states, as they
+change the interpretation of the variables
+
+String:
+-check matching quotes
+-unescape characters when entering them into the symbol table
+-no null characters of EOF characters in string
+-handle EOF error (see part 2)
+-check to make sure string length is less than or equal to max length
+
+
+Comment: 
+-check matching comments, what happens when -- *)
+-for now distinguish between the two types of comments
+
+Handling new lines:
+-detect new lines
+-increment line number
+
+Part 2)
+Matching scopes
+We have to make sure that constructs such as methods, blocks, loops, string
+constants, and parenthesis are appropriately matched at both ends. To do so,
+we define the approriate states for each of these constructs. We then use a
+LIFO data structure to ensure that matched-constructs are closed off in the reverse
+order as their beginning.
+
+Error-free code should have an empty stack by the time we reach its EOF.
+
+Part 3)
+
+Error types:
+string length > max
+EOF in the middle of comment or string
+invalid character (one that can't begin tokens)
+string contains unescaped newline"
+
+
+
+Questions:
+Detect new lines! increment lineno in those cases
+is whitespace at the end necessary
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

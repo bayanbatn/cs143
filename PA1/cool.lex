@@ -71,12 +71,248 @@ import java_cup.runtime.Symbol;
 %class CoolLexer
 %cup
 
+%{
+//State declarations
+%}
+%state STRING_STATE, LINE_COMMENT, BLOCK_COMMENT
+
 %%
 
-<YYINITIAL>"=>"			{ /* Sample lexical rule for "=>" arrow.
-                                     Further lexical rules should be defined
-                                     here, after the last %% separator */
-                                  return new Symbol(TokenConstants.DARROW); }
+<YYINITIAL>"(?i:class\\s)"      
+{
+     return new Symbol(TokenConstants.CLASS);
+}
+
+<YYINITIAL>"(?i:else\\s)"      
+{
+     return new Symbol(TokenConstants.ELSE);
+}
+
+<YYINITIAL>"(?i:fi\\s)"      
+{
+     return new Symbol(TokenConstants.FI);
+}
+
+<YYINITIAL>"(?i:if\\s)"      
+{
+     return new Symbol(TokenConstants.IF);
+}
+
+<YYINITIAL>"(?i:in\\s)"      
+{
+     return new Symbol(TokenConstants.IN);
+}
+
+<YYINITIAL>"(?i:inherits\\s)"      
+{
+     return new Symbol(TokenConstants.INHERITS);
+}
+
+<YYINITIAL>"(?i:let\\s)"      
+{
+     return new Symbol(TokenConstants.LET);
+}
+
+<YYINITIAL>"(?i:loop\\s)"      
+{
+     return new Symbol(TokenConstants.LOOP);
+}
+
+<YYINITIAL>"(?i:pool\\s)"      
+{
+     return new Symbol(TokenConstants.POOL);
+}
+
+<YYINITIAL>"(?i:then\\s)"      
+{
+     return new Symbol(TokenConstants.THEN);
+}
+
+<YYINITIAL>"(?i:while\\s)"      
+{
+     return new Symbol(TokenConstants.WHILE);
+}
+
+<YYINITIAL>"\<\-"  
+{
+     //TODO: verify this is correct
+     return new Symbol(TokenConstants.ASSIGN);
+}
+
+<YYINITIAL>"(?i:case\\s)"      
+{
+     return new Symbol(TokenConstants.CASE);
+}
+
+<YYINITIAL>"(?i:esac\\s)"      
+{
+     return new Symbol(TokenConstants.ESAC);
+}
+
+<YYINITIAL>"(?i:of\\s)"      
+{
+     return new Symbol(TokenConstants.OF);
+}
+
+<YYINITIAL>"(?i:new\\s)"      
+{
+     return new Symbol(TokenConstants.NEW);
+}
+
+<YYINITIAL>"t(?i:rue)"      
+{
+    // record value TODO
+     return new Symbol(TokenConstants.BOOL_CONST);
+}
+
+<YYINITIAL>"f(?i:alse)"      
+{
+    // record value TODO
+     return new Symbol(TokenConstants.BOOL_CONST);
+}
+
+<YYINITIAL>"(?i:le)"      
+{
+    /**
+     * Operators and special characters
+     */
+     return new Symbol(TokenConstants.LE);
+}
+
+<YYINITIAL>"(?i:not)" 
+{
+     return new Symbol(TokenConstants.NOT);
+}
+
+<YYINITIAL>"(?i:isvoid)"     
+{
+     return new Symbol(TokenConstants.ISVOID);
+}
+
+<YYINITIAL>"\+"      
+{
+     return new Symbol(TokenConstants.PLUS);
+}
+
+<YYINITIAL>"\/"      
+{
+     return new Symbol(TokenConstants.DIV);
+}
+
+
+<YYINITIAL>"\-"      
+{
+     return new Symbol(TokenConstants.MINUS);
+}
+
+<YYINITIAL>"\*"      
+{
+     return new Symbol(TokenConstants.MULT);
+}
+
+<YYINITIAL>"\="      
+{
+     return new Symbol(TokenConstants.EQ);
+}
+
+<YYINITIAL>"\<"      
+{
+     return new Symbol(TokenConstants.LT);
+}
+
+<YYINITIAL>"\."      
+{
+     return new Symbol(TokenConstants.DOT);
+}
+
+<YYINITIAL>"\~"      
+{
+     return new Symbol(TokenConstants.NEG);
+}
+
+<YYINITIAL>"\,"      
+{
+     return new Symbol(TokenConstants.COMMA);
+}
+
+<YYINITIAL>"\;"      
+{
+     return new Symbol(TokenConstants.SEMI);
+}
+
+<YYINITIAL>"\:"      
+{
+     return new Symbol(TokenConstants.COLON);
+}
+
+<YYINITIAL>"=>"			
+{ /* Sample lexical rule for "=>" arrow.
+     Further lexical rules should be defined
+     here, after the last %% separator */
+     return new Symbol(TokenConstants.DARROW); 
+}
+
+<YYINITIAL>"\("      
+{
+     return new Symbol(TokenConstants.LPAREN);
+}
+
+<YYINITIAL>"\)"      
+{
+     return new Symbol(TokenConstants.RPAREN);
+}
+
+<YYINITIAL>"\@"      
+{
+     return new Symbol(TokenConstants.AT);
+}
+
+<YYINITIAL>"\{"      
+{
+     return new Symbol(TokenConstants.LBRACE);
+}
+
+<YYINITIAL>"\}"      
+{
+     return new Symbol(TokenConstants.RBRACE);
+}
+
+<YYINITIAL>"[\\d]+"
+{
+     //record value TODO
+     return new Symbol(TokenConstants.INT_CONST);
+}
+
+<YYINITIAL>"\""
+{
+     /* Handling string */
+     yybegin(STRING_STATE);
+     //return yylex();
+}
+
+<STRING_STATE>"[\\w]*"
+{
+    //create string, add to table, make sure formatting is good TODO
+    return new Symbol(TokenConstants.STR_CONST);
+}
+
+<STRING_STATE>"\"" 
+{
+    yybegin(YYINITIAL);
+    //return yylex(); //TODO remove and see what happens
+}
+
+<YYINITIAL>"[a-z][\\w]*"
+{
+    //TODO record typepid
+    return new Symbol(TokenConstants.OBJECTID);
+}
+
+<YYINITIAL>"[A-Z][\\w]*"
+{
+    //TODO record typepid
+    return new Symbol(TokenConstants.TYPEID);
+}
 
 .                               { /* This rule should be the very last
                                      in your lexical specification and
