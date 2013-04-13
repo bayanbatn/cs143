@@ -161,14 +161,12 @@ import java_cup.runtime.Symbol;
 
 <YYINITIAL>"t(?i:rue)"      
 {
-    // record value TODO
-     return new Symbol(TokenConstants.BOOL_CONST);
+     return new Symbol(TokenConstants.BOOL_CONST, java.lang.Boolean.TRUE);
 }
 
 <YYINITIAL>"f(?i:alse)"      
 {
-    // record value TODO
-     return new Symbol(TokenConstants.BOOL_CONST);
+     return new Symbol(TokenConstants.BOOL_CONST, java.lang.Boolean.FALSE);
 }
 
 <YYINITIAL>"(?i:le)"      
@@ -279,39 +277,40 @@ import java_cup.runtime.Symbol;
 
 <YYINITIAL>"[\\d]+"
 {
-     //record value TODO
-     return new Symbol(TokenConstants.INT_CONST);
+     return new Symbol(TokenConstants.INT_CONST, AbstractTable.inttable.addString(yytext()));
 }
 
 <YYINITIAL>"\""
 {
+     // Begin String
      /* Handling string */
      yybegin(STRING_STATE);
-     //return yylex();
+     return next_token();
 }
 
 <STRING_STATE>"[\\w]*"
 {
-    //create string, add to table, make sure formatting is good TODO
-    return new Symbol(TokenConstants.STR_CONST);
+    //create string, add to table, make sure formatting is good, escaped chars, etc TODO
+    return new Symbol(TokenConstants.STR_CONST, AbstractTable.stringtable.addString(yytext()));
 }
 
 <STRING_STATE>"\"" 
 {
+    // End String
     yybegin(YYINITIAL);
-    //return yylex(); //TODO remove and see what happens
+    return next_token(); //TODO remove and see what happens
 }
 
 <YYINITIAL>"[a-z][\\w]*"
 {
-    //TODO record typepid
-    return new Symbol(TokenConstants.OBJECTID);
+    // Handle ObjectID
+    return new Symbol(TokenConstants.OBJECTID, AbstractTable.idtable.addString(yytext()));
 }
 
 <YYINITIAL>"[A-Z][\\w]*"
 {
-    //TODO record typepid
-    return new Symbol(TokenConstants.TYPEID);
+    // Handle TypeID
+    return new Symbol(TokenConstants.TYPEID, AbstractTable.idtable.addString(yytext()));
 }
 
 .                               { /* This rule should be the very last
