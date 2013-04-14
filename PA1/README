@@ -164,8 +164,10 @@ string contains unescaped newline"
 Questions:
 Detect new lines! increment lineno in those cases
 is whitespace at the end necessary
+handle errors
 
-
+handle input:
+"asd\\\nasdf"
 
 
 

@@ -71,105 +71,106 @@ import java_cup.runtime.Symbol;
 %class CoolLexer
 %cup
 
-%{
-//State declarations
-%}
 %state STRING_STATE, LINE_COMMENT, BLOCK_COMMENT
+
+DIGIT = [0-9]
+VAR_CHAR = [0-9a-zA-Z_]
 
 %%
 
-<YYINITIAL>"(?i:class\\s)"      
+<YYINITIAL>[cC][lL][aA][sS][sS]      
 {
+     System.out.println("Found class token");
      return new Symbol(TokenConstants.CLASS);
 }
 
-<YYINITIAL>"(?i:else\\s)"      
+<YYINITIAL>[eE][lL][sS][eE]
 {
      return new Symbol(TokenConstants.ELSE);
 }
 
-<YYINITIAL>"(?i:fi\\s)"      
+<YYINITIAL>[fF][iI]
 {
      return new Symbol(TokenConstants.FI);
 }
 
-<YYINITIAL>"(?i:if\\s)"      
+<YYINITIAL>[iI][fF]
 {
      return new Symbol(TokenConstants.IF);
 }
 
-<YYINITIAL>"(?i:in\\s)"      
+<YYINITIAL>[iI][nN]
 {
      return new Symbol(TokenConstants.IN);
 }
 
-<YYINITIAL>"(?i:inherits\\s)"      
+<YYINITIAL>[iI][nN][hH][eE][rR][iI][tT][sS]
 {
+     System.out.println("Found inherits token");
      return new Symbol(TokenConstants.INHERITS);
 }
 
-<YYINITIAL>"(?i:let\\s)"      
+<YYINITIAL>[lL][eE][tT]
 {
      return new Symbol(TokenConstants.LET);
 }
 
-<YYINITIAL>"(?i:loop\\s)"      
+<YYINITIAL>[lL][oO][oO][pP]
 {
      return new Symbol(TokenConstants.LOOP);
 }
 
-<YYINITIAL>"(?i:pool\\s)"      
+<YYINITIAL>[pP][oO][oO][lL]
 {
      return new Symbol(TokenConstants.POOL);
 }
 
-<YYINITIAL>"(?i:then\\s)"      
+<YYINITIAL>[tT][hH][eE][nN]
 {
      return new Symbol(TokenConstants.THEN);
 }
 
-<YYINITIAL>"(?i:while\\s)"      
+<YYINITIAL>[wW][hH][iI][lL][eE]
 {
      return new Symbol(TokenConstants.WHILE);
 }
 
-<YYINITIAL>"\<\-"  
+<YYINITIAL>"<-"  
 {
-     //TODO: verify this is correct
      return new Symbol(TokenConstants.ASSIGN);
 }
 
-<YYINITIAL>"(?i:case\\s)"      
+<YYINITIAL>[cC][aA][sS][eE]
 {
      return new Symbol(TokenConstants.CASE);
 }
 
-<YYINITIAL>"(?i:esac\\s)"      
+<YYINITIAL>[eE][sS][aA][cC]
 {
      return new Symbol(TokenConstants.ESAC);
 }
 
-<YYINITIAL>"(?i:of\\s)"      
+<YYINITIAL>[oO][fF]
 {
      return new Symbol(TokenConstants.OF);
 }
 
-<YYINITIAL>"(?i:new\\s)"      
+<YYINITIAL>[nN][eE][wW]
 {
      return new Symbol(TokenConstants.NEW);
 }
 
-<YYINITIAL>"t(?i:rue)"      
+<YYINITIAL>t[rR][uU][eE]
 {
      return new Symbol(TokenConstants.BOOL_CONST, java.lang.Boolean.TRUE);
 }
 
-<YYINITIAL>"f(?i:alse)"      
+<YYINITIAL>f[aA][lL][sS][eE]
 {
      return new Symbol(TokenConstants.BOOL_CONST, java.lang.Boolean.FALSE);
 }
 
-<YYINITIAL>"(?i:le)"      
+<YYINITIAL>[lL][eE]
 {
     /**
      * Operators and special characters
@@ -177,68 +178,68 @@ import java_cup.runtime.Symbol;
      return new Symbol(TokenConstants.LE);
 }
 
-<YYINITIAL>"(?i:not)" 
+<YYINITIAL>[nN][oO][tT]
 {
      return new Symbol(TokenConstants.NOT);
 }
 
-<YYINITIAL>"(?i:isvoid)"     
+<YYINITIAL>[iI][sS][vV][oO][iI][dD]
 {
      return new Symbol(TokenConstants.ISVOID);
 }
 
-<YYINITIAL>"\+"      
+<YYINITIAL>"+"      
 {
      return new Symbol(TokenConstants.PLUS);
 }
 
-<YYINITIAL>"\/"      
+<YYINITIAL>"/"      
 {
      return new Symbol(TokenConstants.DIV);
 }
 
 
-<YYINITIAL>"\-"      
+<YYINITIAL>"-"      
 {
      return new Symbol(TokenConstants.MINUS);
 }
 
-<YYINITIAL>"\*"      
+<YYINITIAL>"*"      
 {
      return new Symbol(TokenConstants.MULT);
 }
 
-<YYINITIAL>"\="      
+<YYINITIAL>"="      
 {
      return new Symbol(TokenConstants.EQ);
 }
 
-<YYINITIAL>"\<"      
+<YYINITIAL>"<"      
 {
      return new Symbol(TokenConstants.LT);
 }
 
-<YYINITIAL>"\."      
+<YYINITIAL>"."      
 {
      return new Symbol(TokenConstants.DOT);
 }
 
-<YYINITIAL>"\~"      
+<YYINITIAL>"~"      
 {
      return new Symbol(TokenConstants.NEG);
 }
 
-<YYINITIAL>"\,"      
+<YYINITIAL>","      
 {
      return new Symbol(TokenConstants.COMMA);
 }
 
-<YYINITIAL>"\;"      
+<YYINITIAL>";"      
 {
      return new Symbol(TokenConstants.SEMI);
 }
 
-<YYINITIAL>"\:"      
+<YYINITIAL>":"      
 {
      return new Symbol(TokenConstants.COLON);
 }
@@ -250,71 +251,142 @@ import java_cup.runtime.Symbol;
      return new Symbol(TokenConstants.DARROW); 
 }
 
-<YYINITIAL>"\("      
+<YYINITIAL>"("      
 {
      return new Symbol(TokenConstants.LPAREN);
 }
 
-<YYINITIAL>"\)"      
+<YYINITIAL>")"      
 {
      return new Symbol(TokenConstants.RPAREN);
 }
 
-<YYINITIAL>"\@"      
+<YYINITIAL>"@"      
 {
      return new Symbol(TokenConstants.AT);
 }
 
-<YYINITIAL>"\{"      
+<YYINITIAL>"{"      
 {
      return new Symbol(TokenConstants.LBRACE);
 }
 
-<YYINITIAL>"\}"      
+<YYINITIAL>"}"      
 {
      return new Symbol(TokenConstants.RBRACE);
 }
 
-<YYINITIAL>"[\\d]+"
+<YYINITIAL>{DIGIT}+
 {
      return new Symbol(TokenConstants.INT_CONST, AbstractTable.inttable.addString(yytext()));
 }
 
-<YYINITIAL>"\""
+<YYINITIAL>\"
 {
      // Begin String
-     /* Handling string */
      yybegin(STRING_STATE);
-     return next_token();
 }
 
-<STRING_STATE>"[\\w]*"
+<STRING_STATE>([^\n\"]*|(\\\")|(\\\n))*[\n\"]
 {
-    //create string, add to table, make sure formatting is good, escaped chars, etc TODO
-    return new Symbol(TokenConstants.STR_CONST, AbstractTable.stringtable.addString(yytext()));
-}
-
-<STRING_STATE>"\"" 
-{
-    // End String
+    /* Handling string match */
+    //TODO: check string regex
+    // Whatever happens, we are done parsing the string here
     yybegin(YYINITIAL);
-    return next_token(); //TODO remove and see what happens
+
+    // read in the regex match
+    String token = yytext();
+    StringBuilder sb = new StringBuilder(token.length());
+
+    /* String terminates in a new line */
+    if (token.charAt(token.length()-1) == '\n'){
+        return new Symbol(TokenConstants.ERROR, "Unterminated string constant");
+    }
+
+    /* State of parsing */
+    boolean escaped = false;
+    boolean invalidChar = false;
+
+    for (int i = 0; i < token.length()-1 && !invalidChar; i++){
+
+        char ch = token.charAt(i);
+        switch(ch){
+            case '\\': if (escaped){
+                          sb.append(ch);
+                          escaped = false;
+                      } else
+                          escaped = true;
+                      break;
+            /* Handle escaped characters */
+            case 'b': if (escaped){
+                          sb.append('\b');
+                          escaped = false;
+                      } else
+                          sb.append(ch);
+                      break;
+            case 't': if (escaped){
+                          sb.append('\t');
+                          escaped = false;
+                      } else
+                          sb.append(ch);
+                      break;
+            case 'f': if (escaped){
+                          sb.append('\f');
+                          escaped = false;
+                      } else
+                          sb.append(ch);
+                      break;
+            case 'n': if (escaped){
+                          sb.append('\n');
+                          escaped = false;
+                      } else
+                          sb.append(ch);
+                      break;
+            /* Handle invalid characters */
+            case '\0': invalidChar = true; 
+                       escaped = false;
+                       break;
+            default:   sb.append(ch);
+                       escaped = false;
+                       break;
+        }
+    }
+
+    // invalid character (null) is detected
+    if (invalidChar)
+        return new Symbol(TokenConstants.ERROR, "String contains null character");
+
+    // string is too long
+    if (sb.length() > MAX_STR_CONST)
+        return new Symbol(TokenConstants.ERROR, "String constant too long");
+
+    return new Symbol(TokenConstants.STR_CONST, AbstractTable.stringtable.addString(sb.toString()));
 }
 
-<YYINITIAL>"[a-z][\\w]*"
+<YYINITIAL>[a-z]{VAR_CHAR}*
 {
     // Handle ObjectID
     return new Symbol(TokenConstants.OBJECTID, AbstractTable.idtable.addString(yytext()));
 }
 
-<YYINITIAL>"[A-Z][\\w]*"
+<YYINITIAL>[A-Z]{VAR_CHAR}*
 {
     // Handle TypeID
     return new Symbol(TokenConstants.TYPEID, AbstractTable.idtable.addString(yytext()));
 }
 
-.                               { /* This rule should be the very last
-                                     in your lexical specification and
-                                     will match match everything not
-                                     matched by other lexical rules. */
-                                  System.err.println("LEXER BUG - UNMATCHED: " + yytext()); }
+<YYINITIAL>[\ \b\n\t\f\r\v]+
+{
+    // Do nothing when parsing whitespace
+    // System.out.println("Found: "+yytext()+". Doing nothing"); //TODO remove
+}
+
+.                               
+{ /* This rule should be the very last
+     in your lexical specification and
+     will match match everything not
+     matched by other lexical rules. */
+    System.err.println("LEXER BUG - UNMATCHED: " + yytext()); 
+    //for (Character ch : yytext().toCharArray())
+        //System.out.println("CHAR: " + ((int)ch));
+}
