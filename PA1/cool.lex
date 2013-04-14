@@ -55,15 +55,19 @@ import java_cup.runtime.Symbol;
  *  Ultimately, you should return the EOF symbol, or your lexer won't
  *  work.  */
 
+    String errorInfo = null; 
+
     switch(yy_lexical_state) {
     case YYINITIAL:
 	/* nothing special to do in the initial state */
 	break;
-	/* If necessary, add code for other states here, e.g:
-	   case COMMENT:
-	   ...
-	   break;
-	*/
+    case STRING_STATE:
+        yybegin(YYINITIAL);
+        return new Symbol(TokenConstants.ERROR, "EOF in string constant");
+    case LINE_COMMENT:
+    case BLOCK_COMMENT:
+        yybegin(YYINITIAL);
+        return new Symbol(TokenConstants.ERROR, "EOF in comment");
     }
     return new Symbol(TokenConstants.EOF);
 %eofval}
@@ -80,7 +84,7 @@ VAR_CHAR = [0-9a-zA-Z_]
 
 <YYINITIAL>[cC][lL][aA][sS][sS]      
 {
-     System.out.println("Found class token");
+     //System.out.println("Found class token");
      return new Symbol(TokenConstants.CLASS);
 }
 
@@ -106,7 +110,7 @@ VAR_CHAR = [0-9a-zA-Z_]
 
 <YYINITIAL>[iI][nN][hH][eE][rR][iI][tT][sS]
 {
-     System.out.println("Found inherits token");
+     //System.out.println("Found inherits token");
      return new Symbol(TokenConstants.INHERITS);
 }
 
@@ -300,6 +304,7 @@ VAR_CHAR = [0-9a-zA-Z_]
 
     /* String terminates in a new line */
     if (token.charAt(token.length()-1) == '\n'){
+        curr_lineno += 1;
         return new Symbol(TokenConstants.ERROR, "Unterminated string constant");
     }
 
@@ -375,10 +380,61 @@ VAR_CHAR = [0-9a-zA-Z_]
     return new Symbol(TokenConstants.TYPEID, AbstractTable.idtable.addString(yytext()));
 }
 
-<YYINITIAL>[\ \b\n\t\f\r\v]+
+<YYINITIAL>[\ \b\t\f\r\v]+
 {
     // Do nothing when parsing whitespace
     // System.out.println("Found: "+yytext()+". Doing nothing"); //TODO remove
+}
+
+<YYINITIAL>\n
+{
+    curr_lineno += 1;
+}
+
+<YYINITIAL>\-\-
+{
+    // Begin line comment
+    yybegin(LINE_COMMENT);
+}
+
+<LINE_COMMENT>[.]*
+{
+    // Ignore content of comment
+}
+
+<LINE_COMMENT>\n
+{
+    // Handle comment: ignore everything inside comment
+    yybegin(YYINITIAL);
+}
+
+<YYINITIAL>\(\*
+{
+    // Begin block comment
+    yybegin(BLOCK_COMMENT);
+}
+
+<YYINITIAL>\*\)
+{
+    // Throw error if see comment closure without comment beginning
+    return new Symbol(TokenConstants.ERROR, "Unmatched *)");
+}
+
+<BLOCK_COMMENT>[^\)\*\n]
+{}
+
+<BLOCK_COMMENT>\n
+{
+    curr_lineno += 1;
+}
+
+<BLOCK_COMMENT>[^\*]\)|\*[^\)]
+{}
+
+<BLOCK_COMMENT>"*)"
+{
+    // Done with block comment
+    yybegin(YYINITIAL);
 }
 
 .                               
