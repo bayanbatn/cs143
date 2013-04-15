@@ -383,7 +383,6 @@ VAR_CHAR = [0-9a-zA-Z_]
 <YYINITIAL>[\ \b\t\f\r\v]+
 {
     // Do nothing when parsing whitespace
-    // System.out.println("Found: "+yytext()+". Doing nothing"); //TODO remove
 }
 
 <YYINITIAL>\n
