@@ -174,7 +174,7 @@ VAR_CHAR = [0-9a-zA-Z_]
      return new Symbol(TokenConstants.BOOL_CONST, java.lang.Boolean.FALSE);
 }
 
-<YYINITIAL>[lL][eE]
+<YYINITIAL>"<="
 {
     /**
      * Operators and special characters
@@ -362,7 +362,7 @@ VAR_CHAR = [0-9a-zA-Z_]
         return new Symbol(TokenConstants.ERROR, "String contains null character");
 
     // string is too long
-    if (sb.length() > MAX_STR_CONST)
+    if (sb.length() >= MAX_STR_CONST)
         return new Symbol(TokenConstants.ERROR, "String constant too long");
 
     return new Symbol(TokenConstants.STR_CONST, AbstractTable.stringtable.addString(sb.toString()));
@@ -380,7 +380,7 @@ VAR_CHAR = [0-9a-zA-Z_]
     return new Symbol(TokenConstants.TYPEID, AbstractTable.idtable.addString(yytext()));
 }
 
-<YYINITIAL>[\ \b\t\f\r\v]+
+<YYINITIAL>[\ \b\t\f\r]+
 {
     // Do nothing when parsing whitespace
 }
@@ -396,7 +396,7 @@ VAR_CHAR = [0-9a-zA-Z_]
     yybegin(LINE_COMMENT);
 }
 
-<LINE_COMMENT>[.]*
+<LINE_COMMENT>.
 {
     // Ignore content of comment
 }
@@ -405,6 +405,7 @@ VAR_CHAR = [0-9a-zA-Z_]
 {
     // Handle comment: ignore everything inside comment
     yybegin(YYINITIAL);
+    curr_lineno += 1;
 }
 
 <YYINITIAL>\(\*
@@ -422,12 +423,12 @@ VAR_CHAR = [0-9a-zA-Z_]
 <BLOCK_COMMENT>[^\)\*\n]
 {}
 
-<BLOCK_COMMENT>\n
+<BLOCK_COMMENT>\n|\n\)|\*\n
 {
     curr_lineno += 1;
 }
 
-<BLOCK_COMMENT>[^\*]\)|\*[^\)]
+<BLOCK_COMMENT>[^\*\n]\)|\*[^\)\n]
 {}
 
 <BLOCK_COMMENT>"*)"
@@ -442,6 +443,4 @@ VAR_CHAR = [0-9a-zA-Z_]
      will match match everything not
      matched by other lexical rules. */
     System.err.println("LEXER BUG - UNMATCHED: " + yytext()); 
-    //for (Character ch : yytext().toCharArray())
-        //System.out.println("CHAR: " + ((int)ch));
 }
