@@ -114,76 +114,46 @@ Instructions
 
 Write-up for PA1J
 -----------------
-
+TODO: nested comments
+TODO: EOF in string end and max char
 I'm breaking this project into several components.
 
-Part 1)
-Regex matching
-We define regex to catch input tokens in the appropriate order, and 
-raise a flag when an invalid input is detected.
+** States:
+In addition to the default YYINITIAL state, I define 3 new states:
+STRING_STATE, LINE_COMMENT, and BLOCK_COMMENT. These states are activated
+when we encounter special characters ("\"" for string, and "\(\*" and "--"
+for comments). 
 
-Special cases to considered are the STRING and COMMENT states, as they
-change the interpretation of the variables
+** Regex matching:
+Most regex matches are handled by returning an AbstractSymbol object
+of the appropriate type, without initializing value. The interesting scenarios
+are when we handles comments and string constants.
 
-String:
--check matching quotes
--unescape characters when entering them into the symbol table
--no null characters of EOF characters in string
--handle EOF error (see part 2)
--check to make sure string length is less than or equal to max length
+We handle string constant parsing inside the STRING_STATE, which is triggered
+with a quotes character. We perform regex matching that ensures that the
+end of the string is reached in the input. This means the matching token must
+have a trailing newline or quotes character at the end, which ends the string.
+Once we find a match, we back into YYINITIAL state, regardless of the result
+of the parsing. By iterating through the characters of the matching token, we 
+detect and handle any formatting error on the string constants while ensuring
+that escaped characters are properly processed. We also detect any escaped
+new line chars (both legal and illegal) to update line numbers.
 
+We handle comments inside the LINE_COMMENT and BLOCK_COMMENT states. Tokens
+read in the comment states are disregarded (except for new line chars, which
+are used to update line number). 
 
-Comment: 
--check matching comments, what happens when -- *)
--for now distinguish between the two types of comments
+TODO: nested comments
 
-Handling new lines:
--detect new lines
--increment line number
+** Error Handling:
+EOF are handles inside the eofval{} block. If we are in any state other than
+YYINITIAL, reading EOF will result in an error symbol being generated. We then 
+return the normal EOF symbol after next_token() is called once more. To ensure
+that EOF is returned normally on this second call, we set the state back to 
+YYINITIAL before reporting the error.
 
-Part 2)
-Matching scopes
-We have to make sure that constructs such as methods, blocks, loops, string
-constants, and parenthesis are appropriately matched at both ends. To do so,
-we define the approriate states for each of these constructs. We then use a
-LIFO data structure to ensure that matched-constructs are closed off in the reverse
-order as their beginning.
-
-Error-free code should have an empty stack by the time we reach its EOF.
-
-Part 3)
-
-Error types:
-string length > max
-EOF in the middle of comment or string
-invalid character (one that can't begin tokens)
-string contains unescaped newline"
-
-
-
-Questions:
-Detect new lines! increment lineno in those cases
-is whitespace at the end necessary
-handle errors
-
-handle input:
-"asd\\\nasdf"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+String errors such as invalid char (null char), unescaped new line, and 
+length exceeding max length are handled inside the string parser function,
+by iterating through the characters of the matched token.
 
 
