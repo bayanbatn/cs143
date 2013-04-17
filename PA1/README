@@ -112,11 +112,11 @@ Instructions
 
 ---8<------8<------8<------8<---cut here---8<------8<------8<------8<---
 
+user: naranb
+
 Write-up for PA1J
 -----------------
-TODO: nested comments
-TODO: EOF in string end and max char
-I'm breaking this project into several components.
+I'm breaking this readme into the following sections.
 
 ** States:
 In addition to the default YYINITIAL state, I define 3 new states:
@@ -125,42 +125,47 @@ when we encounter special characters ("\"" for string, and "\(\*" and "--"
 for comments). 
 
 ** Regex matching:
-Most regex matches are handled by returning an AbstractSymbol object
-We have to make sure that constructs such as methods, blocks, loops, string
-constants, and parenthesis are appropriately matched at both ends. To do so,
-we define the approriate states for each of these constructs. We then use a
-LIFO data structure to ensure that matched-constructs are closed off in the reverse
-order as their beginning.
+Most regex matches are handled by returning an AbstractSymbol object. The 
+interesting scenarios are when we handles comments and string constants.
 
-Error-free code should have an empty stack by the time we reach its EOF.
-of the appropriate type, without initializing value. The interesting scenarios
-are when we handles comments and string constants.
+We enter the STRING_STATE when we encounter a quotes character. The rest of the
+string constant is caught through a single regular expression that ensures that
+the string ends only with either a unescaped quotes character, or unescaped
+newline, or the EOF signal.
 
-We handle string constant parsing inside the STRING_STATE, which is triggered
-with a quotes character. We perform regex matching that ensures that the
-end of the string is reached in the input. This means the matching token must
-have a trailing newline or quotes character at the end, which ends the string.
-Once we find a match, we back into YYINITIAL state, regardless of the result
-of the parsing. By iterating through the characters of the matching token, we 
-detect and handle any formatting error on the string constants while ensuring
-that escaped characters are properly processed. We also detect any escaped
-new line chars (both legal and illegal) to update line numbers.
+Inside the STRING_STATE, we handle proper formatting and error detection.
+For formatting, we deal with things such as escaped characters and parse
+out the escape sign (backslash) where necessary, and combine the escape
+sign with the character where appropriate. For error detection, we check to
+see if the last character is EOF or newline. In either of those cases, error
+is thrown. We also check for invalid characters such as \0, and throw
+error when they are detected. Lastly, we check the length of the parsed
+string at the end, and if it exceeds the MAX_LENGTH, then we throw an error.
 
-We handle comments inside the LINE_COMMENT and BLOCK_COMMENT states. Tokens
-read in the comment states are disregarded (except for new line chars, which
-are used to update line number). 
+We handle comments inside the LINE_COMMENT and BLOCK_COMMENT states. We enter
+these states when either -- or (* are detected. Handling LINE_COMMENT is relatively
+simple; we disregard everything that follows after the beginning of the comment,
+and exit the LINE_COMMENT state when a new line character is encountered.
 
-TODO: nested comments
+On the other hand, in the block comment state, we do additional regex matching
+to distinguish disregarded characters from especial tokens such as (* and *).
+We use a variable to keep track of the depth of the comments, in order to handle
+nested comments. Additionally, we match all new line characters, in order to keep
+the line number up to date. We exit from the BLOCK_COMMENT state when the depth
+of the comment goes back to 0. 
 
 ** Error Handling:
-EOF are handles inside the eofval{} block. If we are in any state other than
-YYINITIAL, reading EOF will result in an error symbol being generated. We then 
+EOF are handled inside the eofval{} block for comments. If we are in a comment 
+state, reading EOF will result in an error symbol being generated. We then 
 return the normal EOF symbol after next_token() is called once more. To ensure
 that EOF is returned normally on this second call, we set the state back to 
 YYINITIAL before reporting the error.
 
-String errors such as invalid char (null char), unescaped new line, and 
-length exceeding max length are handled inside the string parser function,
-by iterating through the characters of the matched token.
+If EOF is reached in the STRING_STATE, we detect it using regex matching,
+and generate the "EOF in string const". We then switch over to YYINITIAL
+state, which returns the normal EOF symbol.
 
 
+** Testing:
+We performed testing for matching both keywords as well as various formats of
+string constants and comments. See test.cl for details.

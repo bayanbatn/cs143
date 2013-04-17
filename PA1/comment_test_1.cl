@@ -7,6 +7,13 @@ class CommentTest inherits IO {
      * (* testing nested comments *)
      *)
 
+    (* we will test comments here by making
+     * lots of nested comments (*(*
+     * and seeing if we can pass it *) if all
+     * is well, -- it shouldn't matter how this
+     * comment is formatted *) 
+     *)
+
     -- line comment
     *) --unmatched comment
     population_map : String; --another line comment

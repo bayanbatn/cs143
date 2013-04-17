@@ -65,8 +65,8 @@ import java_cup.runtime.Symbol;
 	/* nothing special to do in the initial state */
 	break;
     case STRING_STATE:
-        yybegin(YYINITIAL);
-        return new Symbol(TokenConstants.ERROR, "EOF in string constant");
+        /* nothing to do here, as EOF is handled inside the rules section */
+        break;
     case LINE_COMMENT:
     case BLOCK_COMMENT:
         yybegin(YYINITIAL);
@@ -82,12 +82,12 @@ import java_cup.runtime.Symbol;
 
 DIGIT = [0-9]
 VAR_CHAR = [0-9a-zA-Z_]
+WHITESPACE = [\ \b\t\f\r]
 
 %%
 
 <YYINITIAL>[cC][lL][aA][sS][sS]      
 {
-     //System.out.println("Found class token");
      return new Symbol(TokenConstants.CLASS);
 }
 
@@ -113,7 +113,6 @@ VAR_CHAR = [0-9a-zA-Z_]
 
 <YYINITIAL>[iI][nN][hH][eE][rR][iI][tT][sS]
 {
-     //System.out.println("Found inherits token");
      return new Symbol(TokenConstants.INHERITS);
 }
 
@@ -179,9 +178,6 @@ VAR_CHAR = [0-9a-zA-Z_]
 
 <YYINITIAL>"<="
 {
-    /**
-     * Operators and special characters
-     */
      return new Symbol(TokenConstants.LE);
 }
 
@@ -294,10 +290,9 @@ VAR_CHAR = [0-9a-zA-Z_]
      yybegin(STRING_STATE);
 }
 
-<STRING_STATE>([^\n\"]*|(\\\")|(\\\n))*[\n\"]
+<STRING_STATE>([^\n\"\\]*|(\\(.|\n)))*[\"\n<<EOF>>]
 {
     /* Handling string match */
-    //TODO: check string regex
     // Whatever happens, we are done parsing the string here
     yybegin(YYINITIAL);
 
@@ -305,10 +300,13 @@ VAR_CHAR = [0-9a-zA-Z_]
     String token = yytext();
     StringBuilder sb = new StringBuilder(token.length());
 
-    /* String terminates in a new line */
     if (token.charAt(token.length()-1) == '\n'){
+        // if string terminates in a new line 
         curr_lineno += 1;
         return new Symbol(TokenConstants.ERROR, "Unterminated string constant");
+    } else if (token.charAt(token.length()-1) != '"'){ 
+        // if string doens't terminate on " or newline, then EOF reached
+        return new Symbol(TokenConstants.ERROR, "EOF in string constant");
     }
 
     /* State of parsing */
@@ -354,6 +352,12 @@ VAR_CHAR = [0-9a-zA-Z_]
             case '\0': invalidChar = true; 
                        escaped = false;
                        break;
+            case '\n': if (escaped){
+                           sb.append('\n');
+                           escaped = false;
+                           curr_lineno += 1;
+                       }
+                       break;
             default:   sb.append(ch);
                        escaped = false;
                        break;
@@ -362,7 +366,7 @@ VAR_CHAR = [0-9a-zA-Z_]
 
     // invalid character (null) is detected
     if (invalidChar)
-        return new Symbol(TokenConstants.ERROR, "String contains null character");
+        return new Symbol(TokenConstants.ERROR, "String contains null character.");
 
     // string is too long
     if (sb.length() >= MAX_STR_CONST)
@@ -383,7 +387,7 @@ VAR_CHAR = [0-9a-zA-Z_]
     return new Symbol(TokenConstants.TYPEID, AbstractTable.idtable.addString(yytext()));
 }
 
-<YYINITIAL>[\ \b\t\f\r]+
+<YYINITIAL>{WHITESPACE}+
 {
     // Do nothing when parsing whitespace
 }
@@ -457,4 +461,5 @@ VAR_CHAR = [0-9a-zA-Z_]
      will match match everything not
      matched by other lexical rules. */
     System.err.println("LEXER BUG - UNMATCHED: " + yytext()); 
+    return new Symbol(TokenConstants.ERROR, yytext());
 }

@@ -4,12 +4,15 @@ import sys
 import os
 from os import path, environ
 
-examples_dir = "../examples/"
+#examples_dir = "../examples/"
+examples_dir = "./"
+os.system("echo begin testing > test.log");
 
 for files in os.listdir(examples_dir):
     if files.endswith(".cl"):
-        os.system("./lexer ../examples/io.cl > mylexer.out");
-        os.system("./coolc -k ../examples/io.cl")
+        os.system("./lexer "+examples_dir+files+" > mylexer.out");
+        os.system("./coolc -k "+examples_dir+files);
+        os.system("echo "+files+" >> test.log");
         os.system("diff lexer.out mylexer.out >> test.log");
         print files
 

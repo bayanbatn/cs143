@@ -1,7 +1,7 @@
 
 class StringConstTest {
 
-    test5 : String <- "this string has null \0";
+    test5 : String <- "this \ string has null \0";
     test6 : String <- "testing escape: \a \c \b \\";
     test7 : String <- "testing tab: \t. After tab.";
     test8 : String <- "length exceeds max                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               ";
