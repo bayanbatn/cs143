@@ -19,6 +19,9 @@ import java_cup.runtime.Symbol;
     // For assembling string constants
     StringBuffer string_buf = new StringBuffer();
 
+    // Comment depth
+    int comment_depth = 0;
+
     private int curr_lineno = 1;
     int get_curr_lineno() {
 	return curr_lineno;
@@ -412,6 +415,7 @@ VAR_CHAR = [0-9a-zA-Z_]
 {
     // Begin block comment
     yybegin(BLOCK_COMMENT);
+    comment_depth += 1;
 }
 
 <YYINITIAL>\*\)
@@ -421,20 +425,30 @@ VAR_CHAR = [0-9a-zA-Z_]
 }
 
 <BLOCK_COMMENT>[^\)\*\n]
-{}
+{ // processing uninteresting stuff
+}
 
 <BLOCK_COMMENT>\n|\n\)|\*\n
 {
+    // handle new line separately to update line number
     curr_lineno += 1;
 }
 
 <BLOCK_COMMENT>[^\*\n]\)|\*[^\)\n]
-{}
+{ // processing uninteresting stuff
+}
+
+<BLOCK_COMMENT>"(*"
+{
+    comment_depth += 1;
+}
 
 <BLOCK_COMMENT>"*)"
 {
     // Done with block comment
-    yybegin(YYINITIAL);
+    comment_depth -= 1;
+    if (comment_depth == 0)
+        yybegin(YYINITIAL);
 }
 
 .                               

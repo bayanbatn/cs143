@@ -126,6 +126,13 @@ for comments).
 
 ** Regex matching:
 Most regex matches are handled by returning an AbstractSymbol object
+We have to make sure that constructs such as methods, blocks, loops, string
+constants, and parenthesis are appropriately matched at both ends. To do so,
+we define the approriate states for each of these constructs. We then use a
+LIFO data structure to ensure that matched-constructs are closed off in the reverse
+order as their beginning.
+
+Error-free code should have an empty stack by the time we reach its EOF.
 of the appropriate type, without initializing value. The interesting scenarios
 are when we handles comments and string constants.
 
