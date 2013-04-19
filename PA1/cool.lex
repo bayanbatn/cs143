@@ -82,7 +82,7 @@ import java_cup.runtime.Symbol;
 
 DIGIT = [0-9]
 VAR_CHAR = [0-9a-zA-Z_]
-WHITESPACE = [\ \b\t\f\r]
+WHITESPACE = [\ \b\t\f\r\x0b]
 
 %%
 
@@ -313,7 +313,7 @@ WHITESPACE = [\ \b\t\f\r]
     boolean escaped = false;
     boolean invalidChar = false;
 
-    for (int i = 0; i < token.length()-1 && !invalidChar; i++){
+    for (int i = 0; i < token.length()-1; i++){
 
         char ch = token.charAt(i);
         switch(ch){
