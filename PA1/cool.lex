@@ -22,6 +22,12 @@ import java_cup.runtime.Symbol;
     // Comment depth
     int comment_depth = 0;
 
+    // String validity state
+    boolean invalidString = false;
+
+    // Buffer for string const
+    StringBuilder sb;
+
     private int curr_lineno = 1;
     int get_curr_lineno() {
 	return curr_lineno;
@@ -46,7 +52,8 @@ import java_cup.runtime.Symbol;
  *  class constructor, all the extra initialization you want to do should
  *  go here.  Don't remove or modify anything that was there initially. */
 
-    // empty for now
+    sb = new StringBuilder(2*MAX_STR_CONST);
+
 %init}
 
 %eofval{
@@ -65,8 +72,8 @@ import java_cup.runtime.Symbol;
 	/* nothing special to do in the initial state */
 	break;
     case STRING_STATE:
-        /* nothing to do here, as EOF is handled inside the rules section */
-        break;
+        yybegin(YYINITIAL);
+        return new Symbol(TokenConstants.ERROR, "EOF in string constant");
     case LINE_COMMENT:
     case BLOCK_COMMENT:
         yybegin(YYINITIAL);
@@ -288,92 +295,85 @@ WHITESPACE = [\ \b\t\f\r\x0b]
 {
      // Begin String
      yybegin(STRING_STATE);
+     // Refresh string builder
+     sb.setLength(0); 
+     invalidString = false;
 }
 
-<STRING_STATE>([^\n\"\\]*|(\\(.|\n)))*[\"\n<<EOF>>]
+<STRING_STATE>[^\n\"\\\0]+
 {
-    /* Handling string match */
+     sb.append(yytext());
+}
+
+<STRING_STATE>(\\.)
+{
+     String token = yytext();
+     if (token.length() != 2)
+        System.err.println("Token length must be 2!");
+
+     // Grab escaped char
+     char ch = token.charAt(1);
+
+     switch(ch){
+     /* Handle escaped characters */
+         case 'b': sb.append('\b');
+             break;
+         case 't': sb.append('\t');
+             break;
+         case 'f': sb.append('\f');
+             break;
+         case 'n': sb.append('\n');
+             break;
+         default:   sb.append(ch);
+     }
+}
+
+<STRING_STATE>(\\\n)
+{
+    // Escaped new line found
+    sb.append('\n');
+    curr_lineno += 1;
+}
+
+<STRING_STATE>\0
+{
+    // Invalid character detected
+    invalidString = true;
+    return new Symbol(TokenConstants.ERROR, "String contains null character.");
+}
+
+<STRING_STATE>\"
+{
+    // Regular end to the string, 
+    // barring invalid char + max length violations
+    
     // Whatever happens, we are done parsing the string here
     yybegin(YYINITIAL);
 
-    // read in the regex match
-    String token = yytext();
-    StringBuilder sb = new StringBuilder(token.length());
-
-    if (token.charAt(token.length()-1) == '\n'){
-        // if string terminates in a new line 
-        curr_lineno += 1;
-        return new Symbol(TokenConstants.ERROR, "Unterminated string constant");
-    } else if (token.charAt(token.length()-1) != '"'){ 
-        // if string doens't terminate on " or newline, then EOF reached
-        return new Symbol(TokenConstants.ERROR, "EOF in string constant");
-    }
-
-    /* State of parsing */
-    boolean escaped = false;
-    boolean invalidChar = false;
-
-    for (int i = 0; i < token.length()-1; i++){
-
-        char ch = token.charAt(i);
-        switch(ch){
-            case '\\': if (escaped){
-                          sb.append(ch);
-                          escaped = false;
-                      } else
-                          escaped = true;
-                      break;
-            /* Handle escaped characters */
-            case 'b': if (escaped){
-                          sb.append('\b');
-                          escaped = false;
-                      } else
-                          sb.append(ch);
-                      break;
-            case 't': if (escaped){
-                          sb.append('\t');
-                          escaped = false;
-                      } else
-                          sb.append(ch);
-                      break;
-            case 'f': if (escaped){
-                          sb.append('\f');
-                          escaped = false;
-                      } else
-                          sb.append(ch);
-                      break;
-            case 'n': if (escaped){
-                          sb.append('\n');
-                          escaped = false;
-                      } else
-                          sb.append(ch);
-                      break;
-            /* Handle invalid characters */
-            case '\0': invalidChar = true; 
-                       escaped = false;
-                       break;
-            case '\n': if (escaped){
-                           sb.append('\n');
-                           escaped = false;
-                           curr_lineno += 1;
-                       }
-                       break;
-            default:   sb.append(ch);
-                       escaped = false;
-                       break;
-        }
-    }
-
-    // invalid character (null) is detected
-    if (invalidChar)
-        return new Symbol(TokenConstants.ERROR, "String contains null character.");
-
-    // string is too long
+    // Already returned error at the appropriate line
+    if (invalidString)
+        return next_token();
+    // String is too long
     if (sb.length() >= MAX_STR_CONST)
         return new Symbol(TokenConstants.ERROR, "String constant too long");
 
     return new Symbol(TokenConstants.STR_CONST, AbstractTable.stringtable.addString(sb.toString()));
 }
+
+<STRING_STATE>\n
+{
+    // String terminates in a new line, resulting in error
+    // Whatever happens, we are done parsing the string here
+    yybegin(YYINITIAL);
+
+    curr_lineno += 1;
+    return new Symbol(TokenConstants.ERROR, "Unterminated string constant");
+}
+
+<STRING_STATE>(\\<<EOF>>)
+{   // handles edge case
+}
+
 
 <YYINITIAL>[a-z]{VAR_CHAR}*
 {
