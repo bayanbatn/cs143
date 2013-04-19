@@ -128,10 +128,12 @@ for comments).
 Most regex matches are handled by returning an AbstractSymbol object. The 
 interesting scenarios are when we handles comments and string constants.
 
-We enter the STRING_STATE when we encounter a quotes character. The rest of the
-string constant is caught through a single regular expression that ensures that
-the string ends only with either a unescaped quotes character, or unescaped
-newline, or the EOF signal.
+We enter the STRING_STATE when we encounter a quotes character. When exiting
+from the STRING_STATE, we have a few different scenarios. The normal exit
+is through an unescaped quotes character. We can also exit from a string
+state through an unescaped newline character, which results in an unterminated
+string error. Lastly, we can exit through an EOF by throwing an EOF in
+string const error. EOF errors are handles in the eofval{} block.
 
 Inside the STRING_STATE, we handle proper formatting and error detection.
 For formatting, we deal with things such as escaped characters and parse
@@ -161,9 +163,10 @@ return the normal EOF symbol after next_token() is called once more. To ensure
 that EOF is returned normally on this second call, we set the state back to 
 YYINITIAL before reporting the error.
 
-If EOF is reached in the STRING_STATE, we detect it using regex matching,
-and generate the "EOF in string const". We then switch over to YYINITIAL
-state, which returns the normal EOF symbol.
+If EOF in the STRING_STATE is handled similarly to the comments case. We
+catch the EOF inside the eofval block, and return an ERROR token. We then
+set our state to the default YYINITIAL, which return the EOF token before
+exitting the lexer.
 
 
 ** Testing:
