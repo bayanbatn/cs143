@@ -4,8 +4,8 @@ import sys
 import os
 from os import path, environ
 
-#examples_dir = "../examples/"
-examples_dir = "./"
+examples_dir = "../examples/"
+#examples_dir = "./"
 os.system("echo begin testing > test.log");
 
 for files in os.listdir(examples_dir):
