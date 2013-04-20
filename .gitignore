@@ -1,6 +1,9 @@
 *.class
 *.s
 *.swp
+*.out
+*.output
+*.log
 
 # Package Files #
 *.war

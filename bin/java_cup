@@ -1,0 +1,1 @@
+java -cp /home/naranb/cs143/lib/java-cup-11a.jar  java_cup.Main $*

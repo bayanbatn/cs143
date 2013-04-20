@@ -1,0 +1,136 @@
+#!/usr/bin/python
+
+import os
+from os import path
+import sys
+import getopt
+import shutil
+import filecmp
+
+opts, args = getopt.getopt(sys.argv[1:], "b:fv")
+opts = dict(opts)
+force_overwrite = "-f" in opts
+verbose = "-v" in opts
+
+def die(fmt, *rest):
+    sys.stderr.write((fmt % tuple(rest)) + "\n")
+    exit(1)
+
+if len(args) <> 2:
+    die("Syntax: %s <assignment> <targetdir>", sys.argv[0])
+
+assn, tgtdir = args
+
+# get the assignment base directory
+if "-b" in opts:
+    basedir = opts["-b"]
+else:
+    classdir = path.dirname(path.dirname(path.abspath(sys.argv[0])))
+    basedir = classdir + "/assignments"
+
+assndir = path.join(basedir, assn)
+if not path.exists(assndir):
+    die("%s: assignment directory %s doesn't exist?", sys.argv[0], assndir)
+
+try:
+    ctlf = open(path.join(assndir, ".control"), "r")
+except:
+    die("%s: no control file for assignment %s", sys.argv[0], assn)
+
+# find or create the target directory
+if not path.exists(tgtdir):
+    try:
+        os.makedirs(tgtdir)
+    except:
+        die("%s: unable to create target directory: %s", sys.argv[0], tgtdir)
+else:
+    if not os.path.isdir(tgtdir):
+        die("%s: specified target directory is not a directory: %s", sys.argv[0], tgtdir)
+
+# now read the control file and do what it says
+copied = []
+unmodified = []
+overwritten = []
+errors = []
+for l in ctlf:
+    # remove comments and leading/trailing whitespace
+    l = l.partition("#")[0].strip()
+    if l == "": continue
+
+    words = l.split()
+    cmd = words[0].lower()
+
+    if cmd == "copy":
+	for w in words[1:]:
+	    srcfile = path.join(assndir, w)
+            dstfile = path.join(tgtdir, w)
+            if path.exists(dstfile):
+                if filecmp.cmp(srcfile, dstfile, shallow = True):
+                    unmodified.append(w)
+                    if verbose: print "%s is unmodified" % (w,)
+                else:
+                    overwritten.append(w)
+                    if force_overwrite:
+                        try:
+                            os.remove(dstfile)
+                            shutil.copy(srcfile, dstfile)
+                            if verbose: print "%s was overwritten" % (w,)
+                        except Exception as e:
+                            errors.append((w, e))
+                            print "%s: ERROR" % (w,)
+            else:
+                try:
+                    shutil.copy(srcfile, dstfile)
+                    copied.append(w)
+                    if verbose: print "%s was copied" % (w,)
+                except Exception as e:
+                    errors.append((w, e))
+                    print "%s: ERROR %s" % (w,str(e))
+        continue
+
+    if cmd == "link":
+	for w in words[1:]:
+	    srcfile = path.join(assndir, w)
+            dstfile = path.join(tgtdir, w)
+            if path.lexists(dstfile):
+                if path.islink(dstfile) and (os.readlink(dstfile) == srcfile):
+                    unmodified.append(w)
+                    if verbose: print "%s is unmodified" % (w,)
+                else:
+                    overwritten.append(w)
+                    if force_overwrite:
+                        try:
+                            os.remove(dstfile)
+                            os.symlink(srcfile, dstfile)
+                            if verbose: print "%s was relinked" % (w,)
+                        except Exception as e:
+                            errors.append((w, e))
+                            print "%s: ERROR" % (w,)
+            else:
+                try:
+                    os.symlink(srcfile, dstfile)
+                    copied.append(w)
+                    if verbose: print "%s was linked" % (w,)
+                except Exception as e:
+                    errors.append((w, e))
+                    print "%s: ERROR %s" % (w,str(e))
+        continue
+
+    if cmd in ("ignore", "required", "dates", "submitdir", "userfile", "maxsize"):
+	# these are just for submission - ignore them here
+        continue
+
+    die("unknown control file command: %s", l)
+
+if len(overwritten) and not force_overwrite:
+    print "The following files appear to have local changes - use -f to forcibly overwrite:"
+    for w in overwritten:
+        print "  ", w
+
+print ("%s: %d files copied/linked, %d unchanged, %d %soverwritten, %d errors" %
+       (assn, len(copied), len(unmodified), len(overwritten),
+        ("would be " if (len(overwritten) and not force_overwrite) else ""),
+        len(errors)))
+
+if len(errors):
+    exit(1)

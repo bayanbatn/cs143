@@ -1,0 +1,94 @@
+#!/usr/bin/python
+
+import sys
+import os
+from os import path, environ
+import getopt
+import tempfile
+import shutil
+import subprocess
+
+opts, args = getopt.getopt(sys.argv[1:], "vl:k")
+opts = dict(opts)
+
+verbose = "-v" in opts
+use_local = opts["-l"].split(",") if ("-l" in opts) else []
+keep_intermediates = "-k" in opts
+
+def find_exec(searchpath, name):
+    for p in searchpath:
+        f = path.join(p, name)
+        if path.isfile(f) and os.access(f, os.X_OK):
+            return f
+    return None
+
+searchpath = ["/usr/class/cs143/bin/.coolref"]
+
+# figure out which binaries we'll use for each stage of the compiler
+exes = dict()
+errors = 0
+for stage in ("lexer", "parser", "semant", "cgen"):
+    x = find_exec(["."] if (stage in use_local) else searchpath, stage)
+    if x is None:
+        sys.stderr.write("can't find executable for %s stage!\n" % (stage,))
+        errors = errors + 1
+    exes[stage] = x
+    if verbose:
+        print "Using %s = %s" % (stage, x)
+
+if errors > 0:
+    exit(1)
+
+# now run the stages in order
+
+def interstage_file(name):
+    try:
+        if keep_intermediates:
+            f = open(name, "w+")
+        else:
+            # create a temp file and delete it from the file system right
+            #  away - we keep an open handle, so we can still use it, but it
+            #  gets cleaned up as soon as we exit
+            fd, tmpname = tempfile.mkstemp()
+            f = os.fdopen(fd)
+            os.remove(tmpname)
+        return f
+    except:
+        sys.stderr.write("%s: couldn't write interstage file: %s\n" % (sys.argv[0], name))
+	exit(1)
+
+# lexer stage
+lexout = interstage_file("lexer.out")
+lexret = subprocess.call([ exes["lexer"] ] + args, stdin = sys.stdin, stdout = lexout)
+if lexret > 0:
+    sys.stderr.write("lexer returned error code: %d\n" % (lexret,))
+    exit(lexret)
+
+# parser stage
+lexout.seek(0) # rewind so we can re-read the output
+parseout = interstage_file("parser.out")
+parseret = subprocess.call([ exes["parser"] ] + args, stdin = lexout, stdout = parseout)
+if parseret > 0:
+    sys.stderr.write("parser returned error code: %d\n" % (parseret,))
+    exit(parseret)
+
+# semantic analysis stage
+parseout.seek(0) # rewind so we can re-read the output
+semout = interstage_file("semant.out")
+semret = subprocess.call([ exes["semant"] ] + args, stdin = parseout, stdout = semout)
+if semret > 0:
+    sys.stderr.write("semant returned error code: %d\n" % (semret,))
+    exit(semret)
+
+# code generation
+semout.seek(0) # rewind so we can re-read the output
+# cgen tries to use the whole path to the source file to figure out the output,
+#  which is not what we want, so trim off paths and just leave base file name
+cgenargs = [ path.basename(x) for x in args ]
+cgenret = subprocess.call([ exes["cgen"] ] + cgenargs, stdin = semout, stdout = sys.stdout)
+if cgenret > 0:
+    sys.stderr.write("cgen returned error code: %d\n" % (cgenret,))
+    exit(cgenret)
+
+# successful termination
+exit(0)

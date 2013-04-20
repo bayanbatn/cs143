@@ -1,0 +1,285 @@
+#!/usr/bin/python
+
+import os
+from os import path
+from fnmatch import fnmatch
+import sys
+import getopt
+import re
+from datetime import datetime
+from dateutil import parser as dateparser
+from hashlib import sha1
+import pwd
+import tarfile
+
+opts, args = getopt.getopt(sys.argv[1:], "b:fvy")
+opts = dict(opts)
+force_overwrite = "-f" in opts
+verbose = "-v" in opts
+justdoit = "-y" in opts
+
+def die(fmt, *rest):
+    sys.stderr.write((fmt % tuple(rest)) + "\n")
+    exit(1)
+
+if len(args) <> 2:
+    die("Syntax: %s <assignment> <sourcedir>", sys.argv[0])
+
+assn, srcdir = args
+
+# get the assignment base directory
+if "-b" in opts:
+    basedir = opts["-b"]
+else:
+    classdir = path.dirname(path.dirname(path.abspath(sys.argv[0])))
+    basedir = classdir + "/assignments"
+
+assndir = path.join(basedir, assn)
+if not path.exists(assndir):
+    die("%s: assignment directory %s doesn't exist?", sys.argv[0], assndir)
+
+try:
+    ctlf = open(path.join(assndir, ".control"), "r")
+except:
+    die("%s: no control file for assignment %s", sys.argv[0], assn)
+
+# make sure the source directory exists
+if not path.isdir(srcdir):
+    die("%s: specified source directory '%s' doesn't appear to be a directory?",
+        sys.argv[0], srcdir)
+
+# now read the control file and remember what we need
+submitdir = None
+links = []
+ignores = []
+reqd = []
+dates = None
+maxsize = None
+userfile = None
+
+for l in ctlf:
+    # remove comments and leading/trailing whitespace
+    l = l.partition("#")[0].strip()
+    if l == "": continue
+
+    words = l.split()
+    cmd = words[0].lower()
+
+    if cmd == "submitdir":
+        assert(len(words) == 2)
+        submitdir = words[1]
+        continue
+
+    if cmd == "dates":
+        assert(len(words) in (3,4))
+        dates = [ dateparser.parse(x) for x in words[1:] ]
+        continue
+
+    if cmd == "maxsize":
+        assert(len(words) == 2)
+        maxsize = int(words[1])
+        continue
+
+    if cmd == "userfile":
+        assert(len(words) in (3,4))
+        minusers = int(words[2])
+        maxusers = int(words[-1]) # will be same as min if only 3 words
+        userfile = (words[1], minusers, maxusers)
+        continue
+
+    if cmd == "link":
+        # remember files that were supposed to be linked so we can warn if they
+        #  aren't anymore
+        links.extend(words[1:])
+        continue
+
+    if cmd == "ignore":
+        ignores.extend(words[1:])
+        continue
+
+    if cmd == "required":
+        # use of append is correct here - we want to remember each set of
+        #  alternatives separately
+        reqd.append(words[1:])
+        continue
+
+    if cmd in ("copy"):
+        # not used by us
+        continue
+       
+    die("unknown control file command: %s", l)
+
+# make sure we have dates and a submit directory
+if (submitdir is None) or not(path.isdir(submitdir)):
+    die("%s: bad or missing submit directory?", sys.argv[0])
+
+if (dates is None):
+    die("%s: open/close dates required", sys.argv[0])
+
+# get a list of all the files in the source directory - do NOT follow links
+
+def walktree(basepath, relpath, filelist, ignores, links):
+    curpath = path.join(basepath, relpath) if relpath else basepath
+
+    try:
+        names = os.listdir(curpath)
+    except Exception as e:
+        die("%s: couldn't list files in directory %s", sys.argv[0], path)
+
+    for n in names:
+        rn = path.join(relpath, n) if relpath else n
+        fn = path.join(basepath, rn)
+
+        # first step: is this in our ignore list?
+        if any(fnmatch(n, p) for p in ignores):
+            if verbose: print "  %s being ignored" % (rn,)
+            continue
+
+        # next, is this something that was symlinked?
+        if n in links:
+            # if so, confirm that it's still a link
+            if not path.islink(fn):
+                print "WARNING: %s is no longer a symlink - if you made changes to this file, your submission may not work" % (rn,)
+            continue
+
+        # warn about other symlinks - we won't pick them up
+        if path.islink(fn):
+            print "WARNING: %s is a symlink and will not be part of submission" % (fn,)
+            continue
+
+        # if this is a directory, recursively walk it too
+        if path.isdir(fn):
+            walktree(basepath, rn, filelist, ignores, links)
+            continue
+
+        # last case, it's a file we will include in the submission
+        fsize = path.getsize(fn)
+        fhash = sha1(open(fn, "rb").read()).hexdigest()
+        filelist[rn] = dict(fullpath = fn, size = fsize, hash = fhash)
+
+
+filelist = dict()
+walktree(srcdir, None, filelist, ignores, links)
+
+print "Found the following files:"
+# figure out the total submission size and make a hash for the whole thing
+#  (using the hashes of the files, not their contents)
+subsize = 0
+subhash = sha1()
+for n in sorted(filelist.keys()):
+    subsize = subsize + filelist[n]["size"]
+    subhash.update(filelist[n]["hash"])
+subhash = subhash.hexdigest()
+
+print "Files to be submitted:"
+for n in sorted(filelist.keys()):
+    print "    %s" % (n,)
+print ""
+
+# check submission size
+if (maxsize is not None) and (subsize > maxsize):
+    print "Your submission would be %d bytes, over the maximum of %d." % (subsize, maxsize)
+    print "Please delete or move any large files that are not necessary for"
+    print "your submission."
+    exit(1)
+
+# now get the username(s)
+
+def get_user_list(fname, minusers, maxusers):
+    users = []
+    if fname == "-":
+        # get user name from environment instead of a file
+        users.append(os.environ["USER"])
+    else:
+        with open(fname, "r") as f:
+            for l in f:
+                m = re.match(r'^\s*user\s*:\s*(\S+)\s*$', l)
+                if m is not None:
+                    u = m.group(1)
+                    # only allow letters and numbers in user IDs
+                    if re.search(r'[^A-Za-z0-9]', u) is not None:
+                        print "ERROR: illegal user ID '%s' - only numbers and letters allowed" % (u,)
+                        exit(1)
+                    users.append(m.group(1))
+    if len(users) < minusers:
+        print "%d users listed in %s - less than minimum of %d" % (len(users), fname, minusers)
+        exit(1)
+    if len(users) > maxusers:
+        print "%d users listed in %s - greater than maximum of %d" % (len(users), fname, maxusers)
+        exit(1)
+
+    return sorted(users)
+
+users = get_user_list(userfile[0], userfile[1], userfile[2])
+
+# last step - get the submission time and check against open/close times
+subtime = datetime.now()
+if subtime < dates[0]:
+    print "WARNING: Submission period is not yet open.  Please consider waiting"
+    print "  until %s to submit." % (str(dates[0]),)
+
+if subtime >= dates[2]:
+    print "ERROR: Submission period is closed as of %s.  No further" % (str(dates[2]),)
+    print "  submissions are being accepted."
+    exit(1)
+
+if subtime >= dates[1]:
+    print "ERROR: Submission is after the initial deadline of %s" % (str(dates[1]),)
+    print "  and will be penalized.  Only your latest submission will be graded."
+
+# all set - summarize the submission for the user
+summary = "Assignment: %s\n" % (assn,)
+summary += "Submitters:\n"
+for u in users:
+    try:
+        pw = pwd.getpwnam(u)
+    except:
+        pw = None
+    summary += "    %s (%s)\n" % (u, pw.pw_gecos if pw else "??")
+summary += "\n"
+
+summary += "Submission Date: %s\n" % (str(subtime),)
+summary += "Submission Size: %d\n" % (subsize,)
+summary += "Submission Hash: %s\n" % (subhash,)
+
+print summary
+
+# ask for confirmation
+if not justdoit:
+    print "Continue with submission? (y/n)"
+    sys.stdout.write("> ")
+    sys.stdout.flush()
+    x = sys.stdin.readline()
+    print x
+    if (x is None) or (len(x) == 0) or (x[0].upper() <> 'Y'):
+        print "Submission cancelled."
+        exit(1)
+
+# attempt actual submission
+try:
+    # first, the info file
+   infodir = path.join(submitdir, "info", "-".join(users))
+   if not path.isdir(infodir):
+      os.mkdir(infodir)
+   infofile = path.join(infodir, subtime.strftime("%Y%m%d%H%M%S.txt"))
+   with open(infofile, "w") as f:
+       f.write(summary)
+       f.write("\n")
+       f.write("Individual Files:\n")
+       for n in sorted(filelist.keys()):
+           f.write("  %-28s %7d %s\n" % (n, filelist[n]["size"], filelist[n]["hash"]))
+
+   subfile = path.join(submitdir, "tarballs", subhash + ".tgz")
+   if path.exists(subfile):
+       print "WARNING: tarfile %s already exists - submission may exactly match a previous submission." % (subfile,)
+   else:
+       t = tarfile.open(subfile, "w:gz")
+       for n in sorted(filelist.keys()):
+           t.add(filelist[n]["fullpath"])
+       t.close()
+except Exception as e:
+    print "HELP!  Exception occurred while copying into submission directory:"
+    print str(e)
+    exit(1)
+
+print "Submission completed."
