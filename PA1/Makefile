@@ -1,8 +1,7 @@
 
 ASSN = 1J
 CLASS= cs143
-CLASSDIR= /home/naranb/cs143
-#CLASSDIR= /afs/ir/class/cs143
+CLASSDIR= /afs/ir/class/cs143
 LIB= -L/usr/pubsw/lib -lfl -R/usr/pubsw/lib
 
 SRC= cool.lex test.cl README

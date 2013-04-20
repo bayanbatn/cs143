@@ -163,7 +163,7 @@ return the normal EOF symbol after next_token() is called once more. To ensure
 that EOF is returned normally on this second call, we set the state back to 
 YYINITIAL before reporting the error.
 
-If EOF in the STRING_STATE is handled similarly to the comments case. We
+EOF in the STRING_STATE is handled similarly to the comments case. We
 catch the EOF inside the eofval block, and return an ERROR token. We then
 set our state to the default YYINITIAL, which return the EOF token before
 exitting the lexer.
