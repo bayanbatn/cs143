@@ -64,12 +64,22 @@ terminal AbstractSymbol TYPEID, OBJECTID;
    /* Complete the nonterminal list below, giving a type for the semantic
       value of each non terminal. (See the CUP documentation for details. */
 
-nonterminal programc program;
-nonterminal Classes class_list;
+nonterminal programc program; //TODO: try using Program i/of programc
 nonterminal class_c class;
-nonterminal Features dummy_feature_list;
+nonterminal Classes class_list;
+nonterminal Feature feature;
+nonterminal Features dummy_feature_list; //TODO change this to feature_list
+nonterminal formalc formal;
+nonterminal Formals formal_list;
+nonterminal Expression expression;
+nonterminal Expressions expression_list;
+nonterminal branch case;
+nonterminal Cases case_list;
 
 /* Precedence declarations go here. */
+// TODO do precendence and error handling
+// TODO prevent left recursion? 
+// TODO how to do self reference
 
 program	
 	::= class_list:cl
@@ -95,8 +105,169 @@ class
 	    {: RESULT = new class_c(curr_lineno(), n, p, f, curr_filename()); :}
 	;
 
+
 /* Feature list may be empty, but no empty features in list. */
 dummy_feature_list
 	::= /* empty */
 	    {: RESULT = new Features(curr_lineno()); :}
+        /* non-empty */
+        | feature:f SEMI dummy_feature_list:feli  
+            {: RESULT = feli.appendElement(f); :}
 	;
+
+
+/* Match against feature */
+feature
+        ::= OBJECTID:oid LPAREN formal_list:foli RPAREN COLON TYPEID:tid LBRACE expression:e RBRACE
+            {: RESULT = new method(curr_lineno(), oid, foli, tid, e);  :}
+        | OBJECTID:oid COLON TYPEID:tid
+            {: RESULT = new attr(curr_lineno(), oid, tid, new no_expr(curr_lineno())); :} 
+        | OBJECTID:oid COLON  TYPEID:tid ASSIGN expression:e
+            {: RESULT = new attr(curr_lineno(), oid, tid, e); :}
+        ;
+
+/* Formal lists, separated by formats */
+formal_list
+        ::= /* empty */
+            {: RESULT = new Formals(curr_lineno()); :}
+        | non_empty_formal_list:foli
+            {: RESULT = foli; :}
+        ;
+
+non_empty_formal_list
+        ::= formal:f 
+            {: RESULT = (new Formals(curr_lineno())).appendElement(f); :}
+        | non_empty_formal_list:foli COMMA formal:f
+            {: RESULT = foli.appendElement(f); :}
+        ;
+
+formal
+        ::= OBJECTID:oid COLON TYPEID:tid
+            {: RESULT = new formalc(curr_lineno(), oid, tid); :}
+        ;
+
+
+/* Expression lists : different formats */
+expression_list
+        ::= /* empty */
+            {: RESULT = new Expressions(curr_lineno()):}
+        | non_empty_expr_list:eli
+            {: RESULT = eli; :}
+        ;
+
+non_empty_expr_list
+        ::= expression:e
+            {: RESULT = (new Expressions(curr_lineno())).appendElement(e); :}
+        | non_empty_expr_list:eli COMMA expression:e
+            {: RESULT = eli.appendElement(e); :}
+        ;
+
+sc_separated_expr_list
+        ::= expression:e SEMI
+            {: RESULT = (new Expressions(curr_lineno())).appendElement(e); :}
+        | sc_separated_expr_list:eli expression:e SEMI
+            {: RESULT = eli.appendElement(e); :}
+        ;
+
+/* Case lists, must be non-empty */
+case_list
+        ::= case:c
+            {: RESULT = (new Cases(curr_lineno())).appendElement(e); :}
+        | case_list:cli COMMA case:c
+            {: RESULT = cli.appendElement(c); :}
+        ;
+
+/* Case statement */
+case
+        ::= OBJECTID:oid COLON TYPEID:tid DARROW expression:e SEMI
+            {: RESULT = new branch(curr_lineno(), oid, tid, e); :}
+
+/* Expressions */
+expression
+        /* assign expression */
+        ::= OBJECTID:oid ASSIGN expression:e
+            {: RESULT = new assign(curr_lineno(), oid, e); :}
+
+        /* dispatch with optional cast */
+        | expression:e AT TYPEID:tid DOT OBJECTID:oid LPAREN expression_list:eli RPAREN
+            {: RESULT = new static_dispatch(curr_lineno(), e, tid, oid, eli); :}
+
+        /* dispath without optional cast */
+        | expression:e DOT OBJECTID:oid LPAREN expression_list:eli RPAREN
+            {: RESULT = new dispatch(curr_lineno(), e, oid, eli); :}
+        | OBJECTID:oid LPAREN expression_list:eli RPAREN 
+            {: RESULT = new dispatch(curr_lineno(), AbstractTable.idtable.addString("self"), oid, eli); :} /*TODO: make sure this is okay */ 
+
+        /* IF expression */
+        | IF expression:e1 THEN expression:e2 ELSE expression:e3 FI
+            {: RESULT = new cond(curr_lineno(), e1, e2, d3); :}
+
+        /* WHILE expression */
+        | WHILE expression:e1 LOOP expression:e2 POOL
+            {: RESULT = new loop(curr_lineno(), e1, e2); :}
+
+        /* BLOCK expression */
+        | LBRACE sc_separated_expr_list:eli RBRACE 
+            {: RESULT = new block(curr_lineno(), eli); :}
+
+        /* LET expression */
+        | LET OBJECTID:oid COLON TYPEID:tid ASSIGN expression:e1 IN expression:e2
+            {: RESULT = new let(curr_lineno(), oid, tid, e1, e2); :}  //TODO: handle ambiguity, handle optional arguments, etc
+
+        /* CASE expression */ 
+        | CASE expression:e OF case_list:cli ESAC
+            {: RESULT = new  typcase(curr_lineno(), e, cli); :}
+
+        | NEW TYPEID:tid
+            {: RESULT = new new_(curr_lineno(), tid); :}
+
+        | ISVOID expression:e
+            {: RESULT = new isvoid(curr_lineno(), e); :}
+
+        | expression:e1 PLUS expression:e2
+            {: RESULT = new plus(curr_lineno(), e1, e2); :}
+
+        | expression:e1 MINUS expression:e2
+            {: RESULT = new sub(curr_lineno(), e1, e2); :}
+
+        | expression:e1 MULT expression:e2
+            {: RESULT = new mul(curr_lineno(), e1, e2); :}
+
+        | expression:e1 DIV expression:e2
+            {: RESULT = new divide(curr_lineno(), e1, e2); :}
+
+        | NEG expression:e
+            {: RESULT = new neg(curr_lineno(), e); :}
+
+        | expression:e1 LT expression:e2
+            {: RESULT = new lt(curr_lineno(), e1, e2); :}
+
+        | expression:e1 LE expression:e2
+            {: RESULT = new leq(curr_lineno(), e1, e2); :}
+
+        | expression:e1 EQ expression:e2
+            {: RESULT = new eq(curr_lineno(), e1, e2); :}
+
+        /* TODO: what is noexpr() do? */
+        | NOT expression:e
+            {: RESULT = new comp(curr_lineno(), e); :}
+
+        | LPAREN expression:e RPAREN
+            {: RESULT = e; :}
+
+        | OBJECTID:oid
+            {: RESULT = new object(curr_lineno(), oid); :}
+
+        | INT_CONST:i
+            {: RESULT = new int_const(curr_lineno(), i); :}
+
+        | STR_CONST:s
+            {: RESULT = new str_const(curr_lineno(), s); :}
+
+        | BOOL_CONST:b
+            {: RESULT = new bool_const(curr_lineno(), b); :}
+        ;
+
+
+
+
