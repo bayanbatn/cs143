@@ -1,2 +1,2 @@
-#!/bin/csh -f
-/usr/class/cs143/bin/coolc -l parser $*
+#!/bin/bash -f
+./coolc -l parser $*

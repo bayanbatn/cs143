@@ -1,2 +1,4 @@
-#!/bin/csh -f
+#!/bin/sh -f
+
+# changed from !/bin/csh -f
 ./lexer $* | ./parser $*
