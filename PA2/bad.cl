@@ -33,25 +33,10 @@ E inherits A {
 
 (* error test for features *)
 
-
-(* error test for attributes *)
-class F {
-    X : Int;
-    i : Int <- 5;
-    j : Int <- 5;
-    y : x;
-    k : Int <- 5;
-    l : Int <- 5;
-    z : Int 5+5;
-    r : Int <- 5;
-    t : Int <- 5;
-    z : <- 5+5;
-};
-
 (* error test for methods *)
 class G {
-    X() : Int {5};
     i : Int <- 5;
+    X() : Int {5}; --X error handling not working
     j : Int <- 5;
     y() : x {5};
     k : Int <- 5;
@@ -74,11 +59,82 @@ class G {
 };
 
 
+(* error test for attributes *)
+class F {
+    i : Int <- 5;
+    X : Int; --X not working for some reason
+    j : Int <- 5;
+    y : x;
+    k : Int <- 5;
+    l : Int <- 5;
+    z : Int 5+5;
+    r : Int <- 5;
+    t : Int <- 5;
+    z : <- 5+5;
+};
+
+
+(* error test for let binding *)
+class G {
+     
+    letBindingErrorTest(i8 : Int) : Int {
+        {
+        let I2 : Int <-2, i1 : Int <- 1, i3 : Int <- 3, I4 : Int <- 4 in
+            i1+I2+i3+I4 ;
+        let i1 : Int <- 1, , i2 : Int <- 2 in
+            i1+i2;
+        let i1 : x <- 1, i2 : Int <- 2 in
+            i1+i2;
+        let I1 : Int, i2 : Int <- 2 in
+            I1+i2 ;
+        let Int <- 2, i1 : Int <- 2 in
+            i1 ;
+        let in
+            i8 ;
+        }
+    };
+};
+
+
+(* error test for block code *)
+class H {
+    
+    blockErrorTest(i8 : Int) : Int {
+        {
+            {
+                5+5;
+                X <- 5;
+                y <- 2;
+            };
+
+            {
+            };
+
+            {
+                X < y;
+            };
+
+            {
+                true;
+                Int + String;
+                1+1;
+                {};
+                let Int <- 2, i1 : Int <- 2 in
+                    i1 ;
+                "hi";
+                5;
+                i8;
+            };
+
+        }
+    };
+};
+
 (* error:  closing brace is missing *)
 Class E inherits A {
     i : Int <- 5;
     j : Int <- 5;
-;
+};
 
 
 
