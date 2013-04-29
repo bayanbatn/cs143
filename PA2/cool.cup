@@ -64,7 +64,7 @@ terminal AbstractSymbol TYPEID, OBJECTID;
    /* Complete the nonterminal list below, giving a type for the semantic
       value of each non terminal. (See the CUP documentation for details. */
 
-nonterminal programc program; //TODO: try using Program i/of programc
+nonterminal programc program; 
 nonterminal class_c class;
 nonterminal Classes class_list;
 nonterminal Feature feature;
@@ -82,15 +82,19 @@ nonterminal Cases case_list;
 
 /* Precedence declarations go here. */
 precedence left NOT;
-precedence left EQ, LT, LE;
+precedence left ISVOID, EQ, LT, LE;
 precedence left PLUS, MINUS;
 precedence left MULT, DIV;
 precedence left NEG;
+precedence left AT, DOT;
+precedence left OBJECTID, INT_CONST, STR_CONST, BOOL_CONST;
 
-// TODO do precendence and error handling
-// TODO prevent left recursion? 
-// TODO how to do self reference
-// TODO handle ambiguity, handle optional arguments, etc
+// TODO error handling
+// TODO is left recursion a problem? 
+// TODO test nested let ambiguity
+// TODO test precedence declarations
+// TODO confirm line numbers are okay 
+// TODO ask about e1left e1right
 
 
 /* Grammer */
@@ -116,6 +120,17 @@ class
 				   f, curr_filename()); :}
 	| CLASS TYPEID:n INHERITS TYPEID:p LBRACE feature_list:f RBRACE SEMI
 	    {: RESULT = new class_c(curr_lineno(), n, p, f, curr_filename()); :}
+        /* handles class declaration error
+         * doesn't deal with errors inside feature_list, as 
+         * that should be taken care of inside error handling
+         * mechanism for features
+         */
+        | error LBRACE feature_list:f RBRACE SEMI 
+            // return dummy class
+            {: RESULT = new class_c(curr_lineno(), 
+                                    AbstractTable.idtable.addString("Object"),
+                                    AbstractTable.idtable.addString("Object"),
+                                    f, curr_filename()); :}
 	;
 
 
@@ -124,19 +139,39 @@ feature_list
 	::= /* empty */
 	    {: RESULT = new Features(curr_lineno()); :}
         /* non-empty */
-        | feature:f SEMI feature_list:feli  
+        | feature_list:feli feature:f 
             {: RESULT = feli.appendElement(f); :}
 	;
 
 
 /* Match against feature */
 feature
-        ::= OBJECTID:oid LPAREN formal_list:foli RPAREN COLON TYPEID:tid LBRACE expression:e RBRACE
+        /* Method rules */
+        ::= OBJECTID:oid LPAREN formal_list:foli RPAREN COLON TYPEID:tid LBRACE expression:e RBRACE SEMI
             {: RESULT = new method(curr_lineno(), oid, foli, tid, e);  :}
-        | OBJECTID:oid COLON TYPEID:tid
+        /* handle errors in method */
+        | error expression:e RBRACE SEMI
+            {: RESULT = new method(curr_lineno(), 
+                                   AbstractTable.idtable.addString("object"),
+                                   new Formals(curr_lineno()),
+                                   AbstractTable.idtable.addString("Object"),
+                                   e); :}
+        /* Attribute rules */
+        | OBJECTID:oid COLON TYPEID:tid SEMI
             {: RESULT = new attr(curr_lineno(), oid, tid, new no_expr(curr_lineno())); :} 
-        | OBJECTID:oid COLON  TYPEID:tid ASSIGN expression:e
+        | OBJECTID:oid COLON  TYPEID:tid ASSIGN expression:e SEMI
             {: RESULT = new attr(curr_lineno(), oid, tid, e); :}
+        /* handle errors in attribute rules */
+        | error expression:e SEMI
+            {: RESULT = new attr(curr_lineno(), 
+                                 AbstractTable.idtable.addString("object"),
+                                 AbstractTable.idtable.addString("Object"),
+                                 e); :}
+        | error SEMI
+            {: RESULT = new attr(curr_lineno(),
+                                 AbstractTable.idtable.addString("object"),
+                                 AbstractTable.idtable.addString("Object"),
+                                 new no_expr(curr_lineno())); :}
         ;
 
 /* Formal lists, separated by formats */
@@ -180,13 +215,21 @@ sc_separated_expr_list
             {: RESULT = (new Expressions(curr_lineno())).appendElement(e); :}
         | sc_separated_expr_list:eli expression:e SEMI
             {: RESULT = eli.appendElement(e); :}
+        /* handle errors inside block statements 
+         * skip over all statements with error by parsing
+         * with the semicolons.
+         */
+        | error SEMI
+            {: RESULT = new Expressions(curr_lineno()); :}
+        | sc_separated_expr_list:eli error SEMI
+            {: RESULT = eli; :}
         ;
 
 /* Case lists, must be non-empty */
 case_list
         ::= case:c
             {: RESULT = (new Cases(curr_lineno())).appendElement(c); :}
-        | case_list:cli COMMA case:c
+        | case_list:cli case:c
             {: RESULT = cli.appendElement(c); :}
         ;
 
@@ -197,13 +240,18 @@ case
         ;
 
 /* Special grammer to handle let statements */
-// TODO: handle nested let ambiguity
 let_expr_end
         ::= COMMA OBJECTID:oid COLON TYPEID:tid ASSIGN expression:e1 let_expr_end:e2
             {: RESULT = new let(curr_lineno(), oid, tid, e1, e2); :}
         | COMMA OBJECTID:oid COLON TYPEID:tid let_expr_end:e2
             {: RESULT = new let(curr_lineno(), oid, tid, new no_expr(curr_lineno()), e2); :}
         | IN expression:e
+            {: RESULT = e; :}
+        /* handle error inside let expression
+         * skip over to the next variable in let if error is detected
+         * skip over to main body if no variable declarations are left
+         */
+        | error let_expr_end:e
             {: RESULT = e; :}
         ;
 
@@ -217,11 +265,11 @@ expression
         | expression:e AT TYPEID:tid DOT OBJECTID:oid LPAREN expression_list:eli RPAREN
             {: RESULT = new static_dispatch(curr_lineno(), e, tid, oid, eli); :}
 
-        /* dispath without optional cast */
+        /* dispatch without optional cast */
         | expression:e DOT OBJECTID:oid LPAREN expression_list:eli RPAREN
             {: RESULT = new dispatch(curr_lineno(), e, oid, eli); :}
         | OBJECTID:oid LPAREN expression_list:eli RPAREN 
-            {: RESULT = new dispatch(curr_lineno(), new no_expr(curr_lineno()), oid, eli); :} /*TODO: make sure this is okay */ 
+            {: RESULT = new dispatch(curr_lineno(), new object(curr_lineno(), AbstractTable.idtable.addString("self")), oid, eli); :} 
 
         /* IF expression */
         | IF expression:e1 THEN expression:e2 ELSE expression:e3 FI
@@ -231,7 +279,9 @@ expression
         | WHILE expression:e1 LOOP expression:e2 POOL
             {: RESULT = new loop(curr_lineno(), e1, e2); :}
 
-        /* BLOCK expression */
+        /* BLOCK expression 
+         * error handling is done inside sc_separated_expr_list
+         */
         | LBRACE sc_separated_expr_list:eli RBRACE 
             {: RESULT = new block(curr_lineno(), eli); :}
 
@@ -243,9 +293,16 @@ expression
         | LET OBJECTID:oid COLON TYPEID:tid let_expr_end:e2
             {: RESULT = new let(curr_lineno(), oid, tid, new no_expr(curr_lineno()), e2); :}  
 
+        /* handle errors in LET expression 
+         * skip over to the next variable in let if error is detected
+         * skip over to main body if no variable declarations are left
+         */
+        | LET error let_expr_end:e 
+            {: RESULT = e; :}
+
         /* CASE expression */ 
         | CASE expression:e OF case_list:cli ESAC
-            {: RESULT = new  typcase(curr_lineno(), e, cli); :}
+            {: RESULT = new typcase(curr_lineno(), e, cli); :}
 
         | NEW TYPEID:tid
             {: RESULT = new new_(curr_lineno(), tid); :}
