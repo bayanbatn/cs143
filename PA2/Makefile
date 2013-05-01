@@ -1,8 +1,8 @@
 
 ASSN = 2J
 CLASS= cs143
-CLASSDIR= /home/naranb/cs143
-#/afs/ir/class/cs143
+#CLASSDIR= /home/naranb/cs143
+CLASSDIR= /afs/ir/class/cs143
 
 SRC= cool.cup good.cl bad.cl README
 CSRC= \
@@ -38,8 +38,8 @@ CLS= ${CFIL:.java=.class}
 OUTPUT= good.output bad.output
 
 JAVAC := javac
-CUP := ${CLASSDIR}/bin/java_cup
-#/usr/class/cs143/bin/java_cup
+#CUP := ${CLASSDIR}/bin/java_cup
+CUP := /usr/class/cs143/bin/java_cup
 
 CUPCLASSPATH := ${CLASSDIR}/lib/java-cup-11a.jar
 
