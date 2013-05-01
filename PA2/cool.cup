@@ -69,6 +69,7 @@ nonterminal class_c class;
 nonterminal Classes class_list;
 nonterminal Feature feature;
 nonterminal Features feature_list; 
+nonterminal Features non_empty_feature_list;
 nonterminal formalc formal;
 nonterminal Formals formal_list;
 nonterminal Formals non_empty_formal_list;
@@ -127,12 +128,6 @@ class
                                     AbstractTable.idtable.addString("Object"),
                                     AbstractTable.idtable.addString("Object"),
                                     feli, curr_filename()); :}
-        | CLASS TYPEID:n INHERITS TYPEID:p LBRACE error feature_list:feli RBRACE SEMI 
-            // return dummy class
-            {: RESULT = new class_c(curr_lineno(), 
-                                    AbstractTable.idtable.addString("Object"),
-                                    AbstractTable.idtable.addString("Object"),
-                                    feli, curr_filename()); :}
 	;
 
 
@@ -141,10 +136,16 @@ feature_list
 	::= /* empty */
 	    {: RESULT = new Features(curr_lineno()); :}
         /* non-empty */
-        | feature_list:feli feature:f 
-            {: RESULT = feli.appendElement(f); :}
+        | non_empty_feature_list:feli
+            {: RESULT = feli; :}
 	;
 
+non_empty_feature_list
+        ::= feature:f
+	    {: RESULT = new Features(curr_lineno()).appendElement(f); :}
+        | non_empty_feature_list:feli feature:f
+            {: RESULT = feli.appendElement(f); :}
+        ;
 
 /* Match against feature */
 feature
@@ -221,10 +222,12 @@ sc_separated_expr_list
          * skip over all statements with error by parsing
          * with the semicolons.
          */
-        | error SEMI
-            {: RESULT = new Expressions(curr_lineno()); :}
         | sc_separated_expr_list:eli error SEMI
             {: RESULT = eli; :}
+        | error SEMI
+            {: RESULT = new Expressions(curr_lineno()); :}
+        | error
+            {: RESULT = new Expressions(curr_lineno()); :}
         ;
 
 /* Case lists, must be non-empty */

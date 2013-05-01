@@ -35,8 +35,8 @@ E inherits A {
 
 (* error test for methods *)
 class G {
-    i : Int <- 5;
     X() : Int {5}; --X error handling not working
+    i : Int <- 5;
     j : Int <- 5;
     y() : x {5};
     k : Int <- 5;
