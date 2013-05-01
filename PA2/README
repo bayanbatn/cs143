@@ -196,3 +196,8 @@ and use of TYPEID instead of OBJECTID in arguments of let expressions. While
 our parser can immidiately detect such cases, the reference parser was unable to
 find them immidiately, which resulted in it discovering error artifacts down 
 the line.
+
+We also wrote scripts to do testing on the sample cool files that were located
+in the class directory, and found that no inconsistencies were observed between the
+reference parser and our parser. You can see script in "example_test_parser", if
+interested in running it.
