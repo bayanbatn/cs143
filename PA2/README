@@ -136,7 +136,63 @@ Instructions
 Write-up for PA2J
 -----------------
 
-TODO:
-test lets
-test error
+Nonterminal Symbols
+====================
+Most of the nonterminal phylum match the COOL SYNTAX formulae given in the 
+cool manual. Not terribly interesting. A few non-terminals that I personally 
+added are:
 
+non_empty_feature_list : a non empty list of features
+non_empty_formal_list: a non-empty list of formals
+non_empty_expr_list: a list of expressions separated out by 
+                     comma, cannot be empty
+sc_separated_expr_list: a list of expressions separated by a 
+                        semicolon, cannot be empty
+
+The non-empty versions of the phyla were added to remove possible left recursion
+issues, and make the syntax formulation more clear and concise.
+
+
+Precedence rules
+====================
+Followed the precedence and associativity rules outlined in the COOL manual
+provided by the class. This meant letting DOT and AT be the highest precdence
+symbols for example, and defining ASSIGN to be right associative, EQ, LT, LE 
+to be non-associative, and everything else to be left associative.
+
+
+Error recovery
+====================
+We perform error recovery from lists of classes, lists of features, lists of
+arguments in let expressions, and lists of expressions in block expressions.
+When appropriate, we defer error recovery to down the line. For example,
+we do not detect errors for "feature_list" inside the "class" definition - this 
+would be much better handled inside the "feature" nonterminal. 
+
+
+Testing
+====================
+I filled out the cool files, "good.cl" and "bad.cl", with code for testing edge 
+cases in both the good and the bad cases. "good.cl" contains code for testing all
+cool syntax expressions. Every terminal symbol and its use is tested at least one
+in this file, and the syntax is correctly used. I wrote a script to test the output
+of my parser against that of the reference solution (minus the differences in line 
+numbers), and made sure there weren't any inconsistencies in the AST output from
+either parsers.
+
+I also included code in "bad.cl" to test out our implementation of error recovery.
+Since error recovery was implemented for lists of classes, lists of features,
+lists of arguments in let expression, and list of expressions in the block
+expression, these syntax error are stress tested. I define multiple classes
+with various syntactical errors to test error handling in class definition.
+However, within the class definition, error contained in the feature_list is
+not handled, as that should be more appropriately handled down the line. 
+
+We also similary defined classes and features to test out the rest of the 
+error recovery. In several cases, we noticed our parser recovered from errors
+better than the reference solution. Some examples of such cases include
+class definition that is missing "CLASS" keyword, empty block expressions,
+and use of TYPEID instead of OBJECTID in arguments of let expressions. While
+our parser can immidiately detect such cases, the reference parser was unable to
+find them immidiately, which resulted in it discovering error artifacts down 
+the line.

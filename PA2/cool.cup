@@ -82,21 +82,15 @@ nonterminal branch case;
 nonterminal Cases case_list;
 
 /* Precedence declarations go here. */
+precedence right ASSIGN;
 precedence left NOT;
-precedence left ISVOID, EQ, LT, LE;
+precedence nonassoc EQ, LT, LE;
 precedence left PLUS, MINUS;
 precedence left MULT, DIV;
+precedence left ISVOID;
 precedence left NEG;
-precedence left AT, DOT;
-precedence left OBJECTID, INT_CONST, STR_CONST, BOOL_CONST;
-
-// TODO error handling
-// TODO is left recursion a problem? 
-// TODO test nested let ambiguity
-// TODO test precedence declarations
-// TODO confirm line numbers are okay 
-// TODO ask about e1left e1right
-
+precedence left DOT;
+precedence left AT;
 
 /* Grammer */
 program	
