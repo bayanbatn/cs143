@@ -61,8 +61,8 @@ class G {
 
 (* error test for attributes *)
 class F {
-    i : Int <- 5;
     X : Int; --X not working for some reason
+    i : Int <- 5;
     j : Int <- 5;
     y : x;
     k : Int <- 5;

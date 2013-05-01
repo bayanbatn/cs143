@@ -114,23 +114,25 @@ class_list
 
 /* If no parent is specified, the class inherits from the Object class */
 class
-	::= CLASS TYPEID:n LBRACE feature_list:f RBRACE SEMI
+	::= CLASS TYPEID:n LBRACE feature_list:feli RBRACE SEMI
 	    {: RESULT = new class_c(curr_lineno(), n, 
 		                   AbstractTable.idtable.addString("Object"), 
-				   f, curr_filename()); :}
-	| CLASS TYPEID:n INHERITS TYPEID:p LBRACE feature_list:f RBRACE SEMI
-	    {: RESULT = new class_c(curr_lineno(), n, p, f, curr_filename()); :}
-        /* handles class declaration error
-         * doesn't deal with errors inside feature_list, as 
-         * that should be taken care of inside error handling
-         * mechanism for features
-         */
-        | error LBRACE feature_list:f RBRACE SEMI 
+				   feli, curr_filename()); :}
+	| CLASS TYPEID:n INHERITS TYPEID:p LBRACE feature_list:feli RBRACE SEMI
+	    {: RESULT = new class_c(curr_lineno(), n, p, feli, curr_filename()); :}
+        /* handles class declaration error */
+        | error LBRACE feature_list:feli RBRACE SEMI 
             // return dummy class
             {: RESULT = new class_c(curr_lineno(), 
                                     AbstractTable.idtable.addString("Object"),
                                     AbstractTable.idtable.addString("Object"),
-                                    f, curr_filename()); :}
+                                    feli, curr_filename()); :}
+        | CLASS TYPEID:n INHERITS TYPEID:p LBRACE error feature_list:feli RBRACE SEMI 
+            // return dummy class
+            {: RESULT = new class_c(curr_lineno(), 
+                                    AbstractTable.idtable.addString("Object"),
+                                    AbstractTable.idtable.addString("Object"),
+                                    feli, curr_filename()); :}
 	;
 
 
