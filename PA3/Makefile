@@ -1,7 +1,8 @@
 
 ASSN = 3J
 CLASS= cs143
-CLASSDIR= /afs/ir/class/cs143
+#CLASSDIR= /afs/ir/class/cs143
+CLASSDIR= /home/naranb/cs143
 
 SRC= ClassTable.java TreeConstants.java cool-tree.java good.cl bad.cl README
 CSRC = \
