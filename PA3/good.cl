@@ -10,6 +10,18 @@ class C {
 	};
 };
 
+class D inherits C {};
+
+class E inherits C {};
+
+class F inherits Int {};
+
+class G inherits D {};
+
+class H inherits IO {};
+
+class I {};
+
 Class Main {
 	main():C {
 	  (new C).init(1,true)

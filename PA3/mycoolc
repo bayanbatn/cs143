@@ -1,2 +1,2 @@
-#!/bin/csh -f
-/usr/class/cs143/bin/coolc -l semant $*
+#!/bin/sh -f
+/home/naranb/cs143/PA3/coolc -l semant $*

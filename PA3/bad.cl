@@ -10,6 +10,27 @@ class C {
 	};
 };
 
+class D inherits C {};
+
+class E inherits C {};
+
+class F inherits Int {};
+
+class G inherits D {};
+
+class H inherits IO {};
+
+-- bad: unreachable classes
+
+class I inherits J {};
+class J inherits K {};
+class K inherits I {};
+
+
+-- bad: duplicate name
+-- class Object {};
+-- class D {};
+
 Class Main {
 	main():C {
 	 {
