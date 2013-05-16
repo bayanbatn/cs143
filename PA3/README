@@ -224,7 +224,7 @@ inheritance:
 check if leaf class:
     if so, discard info
     if not, save info for all child classes - need methods and attributes
-    do shallow copy for objects and methods
+    do shallow copy for objects and methods, or use putall
     keep key value pairs, since these types will not change with inheritance
 
 would need to traverse the graph layers at a time, to make use of this inheritence copying
@@ -253,3 +253,6 @@ throw error.
 declare error if trying to overwire self
 
 ==========================================
+traversing the tree:
+- 
+

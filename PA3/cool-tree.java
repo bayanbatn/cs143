@@ -363,6 +363,10 @@ class class_c extends Class_ {
                 ((attr) f).extractAttrType(classTable);
         }
 
+        if (name.equals(TreeConstants.Main) && !methodToSignature.containsKey(TreeConstants.main_meth)){
+            classTable.reportError(this, ClassTable.ERROR_MAIN_NO_MAIN_METHOD);
+            return;
+        }
     }
 
 }
@@ -480,12 +484,14 @@ class attr extends Feature {
     public void extractAttrType(ClassTable classTable){
         
         if (!classTable.isValidType(type_decl) && !type_decl.equals(TreeConstants.SELF_TYPE)){
+            System.out.println("class: "+classTable.currClassName+", "+name+": "+type_decl);
             classTable.reportError(this, ClassTable.ERROR_TYPE_NOT_DEF);
             type_decl = TreeConstants.No_type; // use No_type for undeclared var
         }
         Map<AbstractSymbol, AbstractSymbol> attrToType = classTable.classToAttrMap.get
                                                          (classTable.currClassName);
         if (attrToType.containsKey(name)){
+            System.out.println("class: "+classTable.currClassName+", "+name+": "+type_decl);
             classTable.reportError(this, ClassTable.ERROR_VAR_NAME_IN_USE);
             type_decl = TreeConstants.No_type; // use No_type for multiple def
         }
@@ -533,10 +539,12 @@ class formalc extends Formal {
 
         /* Validate formal param type */
         if (type_decl.equals(TreeConstants.SELF_TYPE)){
+            System.out.println("class: "+classTable.currClassName+", "+name+": "+type_decl);
             classTable.reportError(this, ClassTable.ERROR_TYPE_SELF_TYPE);
             type_decl = TreeConstants.No_type;
         }
         if (!classTable.isValidType(type_decl)){
+            System.out.println("class: "+classTable.currClassName+", "+name+": "+type_decl);
             classTable.reportError(this, ClassTable.ERROR_TYPE_NOT_DEF);
             type_decl = TreeConstants.No_type;
         }

@@ -14,7 +14,7 @@ class D inherits C {};
 
 class E inherits C {};
 
-class F inherits Int {};
+class F inherits C {};
 
 class G inherits D {};
 

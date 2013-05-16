@@ -347,6 +347,8 @@ class ClassTable {
     public boolean isValidType(AbstractSymbol type){
         if (type.equals(TreeConstants.No_type))
             return true;
+        if (type.equals(TreeConstants.prim_slot))
+            return true;
         return nameToClass.containsKey(type);
     }
 
@@ -375,6 +377,45 @@ class ClassTable {
                     stack.push(next);
                 }
         }
+
+
+        dumpDebugInfo();
+    }
+
+    private void dumpDebugInfo(){
+        if (!Flags.semant_debug) 
+            return;
+
+        // classToAttrMap, classToMethodMap
+        for (AbstractSymbol class_name : nameToClass.keySet()){
+           
+            System.out.println("-----Class: "+class_name+" -----------"); 
+            
+            HashMap<AbstractSymbol, AbstractSymbol> attrToType = 
+                    classToAttrMap.get(class_name);
+            HashMap<AbstractSymbol, List> methodToSignature =
+                    classToMethodMap.get(class_name);
+
+            System.out.println("Printing attributes: ");
+            System.out.println("=====================");
+            for (AbstractSymbol attr : attrToType.keySet()){
+                System.out.println(attr+": "+attrToType.get(attr));
+            }
+            System.out.println();
+
+            System.out.println("Printing methods: ");
+            System.out.println("=====================");
+            for (AbstractSymbol method : methodToSignature.keySet()){
+                System.out.print(method+": ");
+                for (Object o : methodToSignature.get(method)){
+                    AbstractSymbol type = (AbstractSymbol) o;
+                    System.out.print(type + ", ");
+                }
+                System.out.print("\n");
+            }
+            System.out.println();
+        }
+        
     }
 
     /* Error reporting interface */
@@ -432,5 +473,6 @@ class ClassTable {
     public static final String ERROR_VAR_NAME_IN_USE = "Error: variable name in use";
     public static final String ERROR_TYPE_SELF_TYPE = "Error: parameter type cannot be SELF_TYPE";
     public static final String ERROR_INVALID_RET_TYPE = "Error: invalid method return type";
+    public static final String ERROR_MAIN_NO_MAIN_METHOD = "Error: Main class must define main method";
 }
 
