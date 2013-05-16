@@ -173,3 +173,83 @@ Write-up for PA4
 ----------------
 user: naranb
 
+2 passes over AST
+
+1) Inheritence graph validation
+- traverse first level of AST tree, 
+  add classes to 
+- no cycles
+- no inheritance from unimplemented class
+- everything is derived from Object
+- no duplicate class names
+
+how to test in case of correct implementation?
+
+
+4 places variables are introduced:
+- attribute def
+- formal params
+- let exprs
+- case exprs
+
+other ids:
+- class dec
+- method dec (unique within class)
+
+Method/attribute only live inside declared class
+globally visible
+uniquely named
+but doesn't conflict with locally scoped variable names
+or globally scoped attribute names? (test the latter)
+
+Environment object (for free variables/methods)
+- object id to type mapping
+- method signature mapping
+- class name (need this for self type) and method signature lookup
+
+NO_TYPE and SELF_TYPE and NO_CLASS
+INT, STRING, BOOL, IO, Object
+MAIN and main method
+also, generate method for INT, STRING, BOOL, IO, OBJECT, MAIN (main method)
+
+Map<AbstractSymbol - class, Map> - map to 
+Map<AbstractSymbol, AbstractSymbol> attributes in class
+function for generating key 
+getKey(AbstractSymbol, AbstractSymbol) - return String
+Map<AbstractSymbol, Map> class to appropriate map (from function name to types)
+Map<AbstractSymbol, List<AbstractSymbol>> from function name to types
+
+========================================
+inheritance:
+check if leaf class:
+    if so, discard info
+    if not, save info for all child classes - need methods and attributes
+    do shallow copy for objects and methods
+    keep key value pairs, since these types will not change with inheritance
+
+would need to traverse the graph layers at a time, to make use of this inheritence copying
+
+self and SELF_TYPE - TODO, check when it can be used, translate all SELF-TYPE to current class type
+modify the mappings to keep these up to date
+
+TODO: NO_TYPE
+
+
+=========================================
+scoping:
+globally scoped - methods and types
+scoped within entire class - attributes + self (w/o declaration), modify this every time
+locally scoped - nested let/case statement variables
+
+declare error if no matching name is found within any of these 3 
+declare error if duplicate attribute names are defined
+
+use symbol table data structure:
+first level of scope begins inside methods, with the declaration of
+the formal parameters
+store variables and their types in the symbol table at each scope
+for each declaration, if not found within symtable and M and O, then
+throw error. 
+declare error if trying to overwire self
+
+==========================================

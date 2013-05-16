@@ -9,7 +9,20 @@ class ClassTable {
     private PrintStream errorStream;
     private Map<AbstractSymbol, Set<AbstractSymbol>> inheritance;   /* inheritance directed graph structure */
     private Map<AbstractSymbol, class_c> nameToClass;               /* mapping from class name to class obj */
+    private List<AbstractSymbol> uninheritable;                     /* stores list of uninheritable classes */
     // public static final int NUM_PRIMITIVE_CLASSES = 5;
+
+    
+    /* Variable scoping and type checking:
+     * Wraps around the following data structures that are used
+     * for scoping and type checking. Made public for the sake of
+     * painlessly passing the necessary data strcutures around
+     * as arguments  through one object (ClassTable)*/
+    public SymbolTable localVarTypeTable;               /* Handles var scoping and types */
+    public Map<AbstractSymbol, HashMap> classToAttrMap;     /* Maps class name to its attr map */
+    public Map<AbstractSymbol, HashMap> classToMethodMap;   /* Maps class name to its method map */
+    public AbstractSymbol currClassName;                /* Pointer to class we are currently
+                                                           processing with type checking */
 
     /** Creates data structures representing basic Cool classes (Object,
      * IO, Int, Bool, String).  Please note: as is this method does not
@@ -183,17 +196,27 @@ class ClassTable {
         nameToClass.put(Str_class.getName(), Str_class);
         nameToClass.put(Bool_class.getName(), Bool_class);
         nameToClass.put(Object_class.getName(), Object_class);
+
+        /* Initialize uninheritable classes */
+        uninheritable.add(Int_class.getName());
+        uninheritable.add(Str_class.getName());
+        uninheritable.add(Bool_class.getName());
     }
 	
-
     public ClassTable(Classes cls) {
 	semantErrors = 0;
 	errorStream = System.err;
 	
 	/* Initialize the inheritance graph structure */
-        // TODO: include self type here, if so, modify error below
         nameToClass = new HashMap<AbstractSymbol, class_c>(); 
         inheritance = new HashMap<AbstractSymbol, Set<AbstractSymbol>>();
+        uninheritable = new ArrayList<AbstractSymbol>();
+
+        /* Init data structures for var scoping and type checking */
+        localVarTypeTable = new SymbolTable();
+        classToAttrMap = new HashMap<AbstractSymbol, HashMap>();
+        classToMethodMap = new HashMap<AbstractSymbol, HashMap>();
+        currClassName = null;
 
         if (Flags.semant_debug) System.out.println("Installing basic classes");
         installBasicClasses();
@@ -207,6 +230,13 @@ class ClassTable {
                 return;
             }
             nameToClass.put(class_node.getName(), class_node);
+
+            /* Make sure inheritence is not from Int, String, or Bool */
+            if (uninheritable.contains(class_node.getParent())){
+                errorStream.println("Error: inheritence from this parent class not allowed");
+                semantError(class_node);
+                return;
+            }
 
             /* Include class in inheritance graph */
             if (!inheritance.containsKey(class_node.getParent()))
@@ -240,6 +270,7 @@ class ClassTable {
             if (Flags.semant_debug) System.out.print("\n");
         }
 
+        /* Check for cycles within inheritance graph */
         if (class_cnt < nameToClass.size()){
             errorStream.println("Error: some classes are not part of inheritance tree");
             Set<AbstractSymbol> keys = nameToClass.keySet(); // set of all defined class names
@@ -251,6 +282,105 @@ class ClassTable {
             }
             return;
         }
+
+        /* Make sure a Main class is defined */
+        if (!nameToClass.containsKey(TreeConstants.Main)){
+            errorStream.println("Error: must define Main class");
+            return;
+        }
+
+    }
+
+    /* Find LUB for two class types */
+    public AbstractSymbol findLeastUpperBound(AbstractSymbol s1, AbstractSymbol s2){
+
+        /* No type is subtype of everything */
+        if (s1.equals(TreeConstants.No_type))
+            return s2;
+        if (s2.equals(TreeConstants.No_type))
+            return s1;
+
+        /* find LUB */
+        AbstractSymbol curr = s1;
+        List<AbstractSymbol> s1SuperTypes = new ArrayList<AbstractSymbol>();
+
+        /* traverse up tree from s1 */
+        while (!curr.equals(TreeConstants.No_class)){
+            s1SuperTypes.add(curr);
+            curr = nameToClass.get(curr).getParent();
+        }
+
+        curr = s2;
+        while (!curr.equals(TreeConstants.No_class)){
+            if (s1SuperTypes.contains(curr))
+                /* always returns here */
+                return curr;
+
+            curr = nameToClass.get(curr).getParent();
+        }
+
+        errorStream.println("Should not reach this far");
+        return null;
+    }
+
+    /* should have validated type existence before this point */
+    public boolean isSubtype(AbstractSymbol type, AbstractSymbol subtype){
+        
+        /* No_type is subtype of everything */
+        // TODO: what about type = No_type
+        if (subtype.equals(TreeConstants.No_type))
+            return true; 
+
+        AbstractSymbol curr = subtype;
+
+        /* Traverse up the tree */
+        while (!curr.equals(TreeConstants.No_class)){
+            if (curr.equals(type))
+                return true;
+
+            curr = nameToClass.get(curr).getParent();
+        }
+        return false;
+    }
+
+    /* is valid type */
+    public boolean isValidType(AbstractSymbol type){
+        if (type.equals(TreeConstants.No_type))
+            return true;
+        return nameToClass.containsKey(type);
+    }
+
+    public AbstractSymbol getClassFilename(){
+        if (currClassName == null)
+            return null;
+        return nameToClass.get(currClassName).getFilename();
+    }
+
+    public void doTypeCheck(){
+
+        Stack<AbstractSymbol> stack = new Stack<AbstractSymbol>();
+        stack.push(TreeConstants.Object_);
+
+        /* First traversal */
+        while(!stack.isEmpty()){
+            AbstractSymbol curr = stack.pop();
+            class_c class_node = nameToClass.get(curr);
+
+            /* Extract attribute and method type info */ 
+            currClassName = curr;
+            class_node.findAttrAndMethodTypes(this); 
+
+            if (inheritance.containsKey(curr))
+                for (AbstractSymbol next : inheritance.get(curr)){
+                    stack.push(next);
+                }
+        }
+    }
+
+    /* Error reporting interface */
+    public void reportError(TreeNode t, String errMsg){
+        errorStream.println(errMsg);
+        semantError(nameToClass.get(currClassName).getFilename(), t);
     }
 
     /** Prints line number and file name of the given class.
@@ -297,6 +427,10 @@ class ClassTable {
     public boolean errors() {
 	return semantErrors != 0;
     }
+
+    public static final String ERROR_TYPE_NOT_DEF = "Error: parameter type not defined";
+    public static final String ERROR_VAR_NAME_IN_USE = "Error: variable name in use";
+    public static final String ERROR_TYPE_SELF_TYPE = "Error: parameter type cannot be SELF_TYPE";
+    public static final String ERROR_INVALID_RET_TYPE = "Error: invalid method return type";
 }
-			  
-    
+

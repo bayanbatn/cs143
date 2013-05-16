@@ -6,9 +6,10 @@
 //
 //////////////////////////////////////////////////////////
 
-import java.util.Enumeration;
 import java.io.PrintStream;
-import java.util.Vector;
+import java.util.*;
+			  
+
 
 
 /** Defines simple phylum Program */
@@ -221,6 +222,7 @@ class Cases extends ListNode {
     See <a href="TreeNode.html">TreeNode</a> for full documentation. */
 class programc extends Program {
     protected Classes classes;
+
     /** Creates "programc" AST node. 
       *
       * @param lineNumber the line in the source file from which this node came.
@@ -265,14 +267,17 @@ class programc extends Program {
     public void semant() {
 	/* ClassTable constructor may do some semantic analysis */
 	ClassTable classTable = new ClassTable(classes);
-	
-	/* some semantic analysis code may go here */
-
+        classTable.doTypeCheck();
+        
 	if (classTable.errors()) {
 	    System.err.println("Compilation halted due to static semantic errors.");
 	    System.exit(1);
 	}
     }
+
+    
+
+    
 
 }
 
@@ -330,6 +335,36 @@ class class_c extends Class_ {
         out.println(Utilities.pad(n + 2) + ")");
     }
 
+    public void findAttrAndMethodTypes(ClassTable classTable){
+
+        /* Maps attributes to their types */
+        HashMap<AbstractSymbol, AbstractSymbol> attrToType;
+        /* Maps methods to their signatures */
+        HashMap<AbstractSymbol, List> methodToSignature; 
+
+        if (parent.equals(TreeConstants.No_class)){
+            attrToType = new HashMap<AbstractSymbol, AbstractSymbol>();
+            methodToSignature = new HashMap<AbstractSymbol, List>();
+        } else {
+            attrToType = (HashMap<AbstractSymbol, AbstractSymbol>) 
+                          classTable.classToAttrMap.get(parent).clone();
+            methodToSignature = (HashMap<AbstractSymbol, List>) 
+                                 classTable.classToMethodMap.get(parent).clone();
+        }
+        classTable.classToAttrMap.put(name, attrToType);
+        classTable.classToMethodMap.put(name, methodToSignature);
+
+        for (Enumeration e = features.getElements(); e.hasMoreElements();) {
+            Feature f = (Feature) e.nextElement();
+            /* Check feature type at runtime */
+            if (method.class.isAssignableFrom(f.getClass()))
+                ((method) f).extractMethodSignature(classTable);
+            else
+                ((attr) f).extractAttrType(classTable);
+        }
+
+    }
+
 }
 
 
@@ -379,6 +414,26 @@ class method extends Feature {
 	expr.dump_with_types(out, n + 2);
     }
 
+    /* Extract method signature */
+    public void extractMethodSignature(ClassTable classTable){
+        
+        ArrayList<AbstractSymbol> signature = new ArrayList<AbstractSymbol>();
+
+        for (Enumeration e = formals.getElements(); e.hasMoreElements();) {
+            AbstractSymbol formalType = ((formalc) e.nextElement()).extractFormalType(classTable);
+            signature.add(formalType);
+        }
+        /* Validate return type */
+        if (!classTable.isValidType(return_type) && !return_type.equals(TreeConstants.SELF_TYPE)){
+            classTable.reportError(this, ClassTable.ERROR_INVALID_RET_TYPE);
+            return_type = TreeConstants.No_type;
+        }
+        signature.add(return_type);
+
+        Map<AbstractSymbol, List> methodToSignature = classTable.classToMethodMap
+                                                      .get(classTable.currClassName);
+        methodToSignature.put(name, signature); 
+    }
 }
 
 
@@ -421,6 +476,21 @@ class attr extends Feature {
 	init.dump_with_types(out, n + 2);
     }
 
+    /* Extract attribute type info */
+    public void extractAttrType(ClassTable classTable){
+        
+        if (!classTable.isValidType(type_decl) && !type_decl.equals(TreeConstants.SELF_TYPE)){
+            classTable.reportError(this, ClassTable.ERROR_TYPE_NOT_DEF);
+            type_decl = TreeConstants.No_type; // use No_type for undeclared var
+        }
+        Map<AbstractSymbol, AbstractSymbol> attrToType = classTable.classToAttrMap.get
+                                                         (classTable.currClassName);
+        if (attrToType.containsKey(name)){
+            classTable.reportError(this, ClassTable.ERROR_VAR_NAME_IN_USE);
+            type_decl = TreeConstants.No_type; // use No_type for multiple def
+        }
+        attrToType.put(name, type_decl);
+    }
 }
 
 
@@ -458,11 +528,26 @@ class formalc extends Formal {
         dump_AbstractSymbol(out, n + 2, type_decl);
     }
 
+    /* Extract formal param type */
+    public AbstractSymbol extractFormalType(ClassTable classTable){
+
+        /* Validate formal param type */
+        if (type_decl.equals(TreeConstants.SELF_TYPE)){
+            classTable.reportError(this, ClassTable.ERROR_TYPE_SELF_TYPE);
+            type_decl = TreeConstants.No_type;
+        }
+        if (!classTable.isValidType(type_decl)){
+            classTable.reportError(this, ClassTable.ERROR_TYPE_NOT_DEF);
+            type_decl = TreeConstants.No_type;
+        }
+        return type_decl;
+    }
+
 }
 
 
 /** Defines AST constructor 'branch'.
-    <p>
+  <p>
     See <a href="TreeNode.html">TreeNode</a> for full documentation. */
 class branch extends Case {
     protected AbstractSymbol name;
