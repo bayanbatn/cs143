@@ -354,6 +354,7 @@ class class_c extends Class_ {
         classTable.classToAttrMap.put(name, attrToType);
         classTable.classToMethodMap.put(name, methodToSignature);
 
+        /* Populate method and attribute type info structures */
         for (Enumeration e = features.getElements(); e.hasMoreElements();) {
             Feature f = (Feature) e.nextElement();
             /* Check feature type at runtime */
@@ -362,6 +363,8 @@ class class_c extends Class_ {
             else
                 ((attr) f).extractAttrType(classTable);
         }
+        /* Add self variable */
+        attrToType.put(TreeConstants.self, TreeConstants.SELF_TYPE);
 
         if (name.equals(TreeConstants.Main) && !methodToSignature.containsKey(TreeConstants.main_meth)){
             classTable.reportError(this, ClassTable.ERROR_MAIN_NO_MAIN_METHOD);

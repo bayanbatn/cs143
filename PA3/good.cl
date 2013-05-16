@@ -1,3 +1,4 @@
+
 class C {
 	a : Int;
 	b : Bool;
@@ -8,9 +9,23 @@ class C {
 		self;
            }
 	};
+        foo () : Int {
+            a
+        };
+        bar () : SELF_TYPE {
+            self
+        };
 };
 
-class D inherits C {};
+class D inherits C {
+    c : Int <- 5;
+    myfunc () : Int {
+        foo() + c
+    };
+    bar () : SELF_TYPE{
+        copy()
+    };
+};
 
 class E inherits C {};
 
@@ -18,7 +33,14 @@ class F inherits C {};
 
 class G inherits D {};
 
-class H inherits IO {};
+class H inherits IO {
+    a : Int;
+    b : String;
+
+    foo () : String {
+:       in_string()
+    };
+};
 
 class I {};
 
