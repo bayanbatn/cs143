@@ -170,111 +170,163 @@ Instructions
 ---8<------8<------8<------8<---cut here---8<------8<------8<------8<---
 
 Write-up for PA4
-----------------
+---------------------------------------------------------------------
 user: naranb
 
-2 passes over AST
-
-1) Inheritence graph validation
-- traverse first level of AST tree, 
-  add classes to 
-- no cycles
-- no inheritance from unimplemented class
-- everything is derived from Object
-- no duplicate class names
-
-how to test in case of correct implementation?
+We perform the semantic analysis in 2 phases. The first phase involves
+building up class hierarchy, and ensuring its correctness. The next
+phase involves performing type checks on the AST tree, and generating
+the type-annotated tree at the end. If errors are encountered along the
+way, then we print out error indicators. 
 
 
-4 places variables are introduced:
-- attribute def
-- formal params
-- let exprs
-- case exprs
+Phase 1: Building class hierarchy
+======================================================================
+At this stage, we iterate through the list of classes in the program, 
+and build up the graph structure. The graph is stored inside a map object.
+A key-value pair corresponds to a parent-child pair in this scenario.
+We include a group of primitive classes such as Int, String, IO, Object,
+and Bool in this graph as well.
 
-other ids:
-- class dec
-- method dec (unique within class)
+Once all parent-child pairs have been included, we validate the graph
+structure. This involves several checks:
+1) ensure graph is tree structure, with Object at the root.
+2) no inheritence from Int, String, Bool or SELF_TYPE
+3) no cycles within graph
+4) no disjoint regions within graph
+5) Main class is defined
 
-Method/attribute only live inside declared class
-globally visible
-uniquely named
-but doesn't conflict with locally scoped variable names
-or globally scoped attribute names? (test the latter)
-
-Environment object (for free variables/methods)
-- object id to type mapping
-- method signature mapping
-- class name (need this for self type) and method signature lookup
-
-NO_TYPE and SELF_TYPE and NO_CLASS
-INT, STRING, BOOL, IO, Object
-MAIN and main method
-also, generate method for INT, STRING, BOOL, IO, OBJECT, MAIN (main method)
-
-Map<AbstractSymbol - class, Map> - map to 
-Map<AbstractSymbol, AbstractSymbol> attributes in class
-function for generating key 
-getKey(AbstractSymbol, AbstractSymbol) - return String
-Map<AbstractSymbol, Map> class to appropriate map (from function name to types)
-Map<AbstractSymbol, List<AbstractSymbol>> from function name to types
-
-========================================
-inheritance:
-check if leaf class:
-    if so, discard info
-    if not, save info for all child classes - need methods and attributes
-    do shallow copy for objects and methods, or use putall
-    keep key value pairs, since these types will not change with inheritance
-
-would need to traverse the graph layers at a time, to make use of this inheritence copying
-
-self and SELF_TYPE - TODO, check when it can be used, translate all SELF-TYPE to current class type
-modify the mappings to keep these up to date
-
-TODO: NO_TYPE
-things to watch out for:
-make sure all expressions are evaluated, regardless of error
-make sure NO_TYPE is checked for all returning expression types
-
-choosing to use NO_TYPE vs. other types
-in certain error cases, it's better for error recovery to use
-types other than NO_TYPE. Such as in the case of boolean or
-integer operations. There are also cases where we know the expected
-type, such as with static dispath, when obj type evals to NO_TYPE
-
-There are also cases when type error is detected on method params 
-that are irrelevant to the final return type. In those cases,
-instead of returning NO_TYPE, we return the actual type. This,
-I believe, is strictly better and more accurate in terms of error
-recovery.
-
-For no_expr, we assign No_type, since that is guaranteed to be 
-compatible with whatever constraints there may be on the output 
-of the expression (i.e. with variable initialization). 
-
-=========================================
-scoping:
-globally scoped - methods and types
-scoped within entire class - attributes + self (w/o declaration), modify this every time
-locally scoped - nested let/case statement variables
-
-declare error if no matching name is found within any of these 3 
-declare error if duplicate attribute names are defined
-
-use symbol table data structure:
-first level of scope begins inside methods, with the declaration of
-the formal parameters
-store variables and their types in the symbol table at each scope
-for each declaration, if not found within symtable and M and O, then
-throw error. 
-declare error if trying to overwire self
-
-==========================================
-traversing the tree:
-- 
+Most of the above checks can performed with a DFS walk through the graph,
+starting at root. This makes sure that all classes are descendant of Object,
+and that graph is tree structured. Note that cool-syntax enforces one-parent 
+per child, which necessarily means that if a cycle exists in the graph,
+then it won't be reachable from Object. This also makes it easier to detect cycles
+as we simply keep track of classes that we don't come across in our DFS walk.
+Lastly, if a class inherits from an undefined graph, then this also means that
+class is not part of the tree structure, and can also be detected the same way.
 
 
-error recovery question:
-should i recover from error using boolean or int types instead of no_type 
-in certain expressions?
+Phase 2: Type Checking
+========================================================================
+At this stage, we perform type checking. We do this with two passes over the 
+AST tree. In the first pass, we collect type information on attributes and 
+methods of all classes. This stage is necessary, as we need type information
+on globally visible features such as methods before we can type check the
+AST tree, the second stage of phase 2. 
+
+In the first pass, we use a doubly nested map object to store type information
+(first map uses class name as key, second map uses method/attr name as key, with
+type info for value). We also ensure that attributes and methods have valid types
+i.e. no undeclared types, and that inheritance of methods and attributes are
+carried out appropriately. To facilitate the inheritance of features, we traverse
+the list of classes again using a DFS, starting at root. Each child's feature type
+table is a shallow copy of the parents feature type info. An incomplete list
+of tasks we perform at this stage:
+1) collect attr/method type/signature info
+2) type information of attr/method are valid (f/ex no undefined types)
+3) ensure no duplication of attr/method happens
+4) ensure inheritance is carried out correctly (i.e. type info doesn't change)
+5) ensure Main class has a main method
+6) include self and SELF_TYPE as attributes for every class
+
+For the second pass, we recurse through the AST tree. We use the symbol table
+to carry scoping information for local variables (globals are accessed through
+the maps I described earlier). The symbol table also contains type information
+for the local variables. Note that new scope is created when:
+1) entering a method (formals are local variables)
+2) entering a let statement 
+3) entering a case statement
+When looking up an identifier, we look through the symbol table first (in LIFO
+order), and then look at the global attr/method maps. If an identifier is not
+found, then we declare error.
+
+During the second pass, we also define a environment data structure that carries 
+all necessary information for type checking, such as current class, symbol table, 
+and the global attr/method maps. See more on this below. Type checking process 
+itself follows the cool-manual's section on type checking rules. Outside of
+following the type checking rules, some interesting challenges are:
+1) subtyping
+We use the inheritance graph to check subtype relationships. Additionally,
+we handle special cases such as when SELF_TYPE and No_type are passed in.
+SELF_TYPE subtyping behaves as described in lecture. No_type is considered
+to be a subtype of all classes, although it is not explicitly included in the
+inheritance graph.
+2) LUB 
+We also use the inheritance graph to compute LUB. As with subtyping, we also
+handle special cases when SELF_TYPE and No_type are passed in. SELF_TYPE 
+LUB computation behaves as described in lecture. No_type is considered subtype
+of all classes: therefore, whatever the second class is, is returned as LUB.
+
+
+Error recovery
+============================================================================
+At the first phase, if error is detected, we finish processing the phase, 
+and return without performing type checking. At this phase, we can recover
+from any inheritance level semantic errors, and were able to catch more
+errors than the reference solution in most cases.
+
+At the second phase, we use the compiler's No_type when recovering from error.
+This works great when preventing cascading error once an error has been detected
+at low levels. In general, No_type behaves optimistically, assuming that
+whatever type that it is replacing would behave correctly once fixed, since
+No_type will pass any subtyping tests, and will always return the most generic
+type when used to compute LUB. We use No_type in the following cases:
+1) object type not found
+2) "new" expression with invalid
+3) "assign" when expr evaluates to invalid type (not subtype)
+4) let/case statements where declared type is invalid
+5) return type of dispatch, when expression evaluates to No_type
+... (i'm sure there are others, but i'm running out of time :) )
+In case of static dispatch, we simply used the declared type, and assume that
+the correct value of the expression would've been a subtype of it. In the case
+of normal dispatch, since we have no type information, we have no choice but
+to also declare the return type of the method No_type.
+
+We don't use No_type when there's opportunity for better error recovery mechanism.
+For example, with operations such as +-/*, outcome will always be Int, regardless
+of type errors within operands. Therefore, it makes more sense to return 
+Int in those cases than to return No_type. Similar reasoning applies to other
+expression types such as "<", "<=", "=", and so on.
+
+
+Notable data structures used
+============================================================================
+-- ClassTable:
+I overloaded the use of this data structure. In phase 1, when building the
+class hierarchy, classtable is used to hold the class graph structure. Additionally
+classtable acts as the program environment in the second phase of the program,
+and contains the symbol table (for storing local var type infor), method/attr maps
+(for global vars), and a pointer to the current class when traversing the AST tree
+in the second stage of Phase 2. The program environment related datastructures
+are stored public, for ease of access. Some other non-trivial tasks performed
+by classtable:
+1) check subtyping (uses inheritance graph)
+2) compute LUB (uses inheritance graph)
+3) check validity of types (makes sure they are defined somewhere) (uses inheritance
+    graph)
+
+-- Symbol table:
+Used to store local variable info. Provided in starter code.
+
+-- Global attr/method maps:
+Implemented using a doubly nested map. Serves as a mapping:
+(class, attr/method) => (type/signature info)
+Using a nested map also makes it easy to perform shallow copies of 
+attr/method type info from parent classes. 
+
+-- Inheritance graph:
+Implemented as a Map<AbstractSymbol, AbstractTable> object,
+mapping parent class name to child class name. 
+
+
+Testing
+==========================================================================
+I have written severel cool files to test various aspects of the semantics of
+cool. In addition, I have tested this submission over examples files provided
+by the class. To simplify the process of testing, I have written a script
+for batch processing directories food of cool files (named 'examples_test_parser',
+if interested).
+
+In terms of organization, I tried to write a good/bad cool file for every component
+of cool semantics, ranging from scoping, to inheritance, to subtyping and LUB
+computation, etc. See "mytests" directory for these files.

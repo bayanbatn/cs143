@@ -382,7 +382,6 @@ class class_c extends Class_ {
     /* Second traversal through the program */
     public void checkAttrAndMethodTypes(ClassTable classTable){
 
-        //System.out.println("Type checking starts now");
         /* Iterate through features */
         for (Enumeration e = features.getElements(); e.hasMoreElements();) {
             Feature f = (Feature) e.nextElement();
@@ -454,13 +453,23 @@ class method extends Feature {
         }
         /* Validate return type */
         if (!classTable.isValidType(return_type)){
-            classTable.reportError(this, ClassTable.ERROR_INVALID_RET_TYPE);
+            classTable.reportError(this, String.format(ClassTable.ERROR_INVALID_RET_TYPE, name));
             return_type = TreeConstants.No_type;
         }
         signature.add(return_type);
 
         Map<AbstractSymbol, List> methodToSignature = classTable.classToMethodMap
                                                       .get(classTable.currClassName);
+        /* If method is inherited or previously defined, match signatures */
+        if (methodToSignature.containsKey(name)){
+            boolean mismatch = signature.size() != methodToSignature.get(name).size();
+            for (int i = 0; !mismatch && i < signature.size(); i++)
+                mismatch = !signature.get(i).equals(methodToSignature.get(name).get(i));
+            if (mismatch){
+                classTable.reportError(this, String.format(classTable.ERROR_METHOD_SIGN_MISMATCH,name));
+                signature = (ArrayList<AbstractSymbol>) methodToSignature.get(name);
+            }
+        }
         methodToSignature.put(name, signature); 
     }
 
@@ -477,7 +486,8 @@ class method extends Feature {
         /* verify final type compatibility */
         AbstractSymbol assigned_type = expr.computeType(classTable);
         if (!classTable.isSubtype(return_type, assigned_type)){
-            classTable.reportError(this, ClassTable.ERROR_RET_TYPE_MISMATCH);
+            classTable.reportError(this, String.format(ClassTable.ERROR_RET_TYPE_MISMATCH, 
+                                   assigned_type, return_type));
         }
         
         classTable.localVarToType.exitScope();
@@ -528,15 +538,13 @@ class attr extends Feature {
     public void extractAttrType(ClassTable classTable){
         
         if (!classTable.isValidType(type_decl)){
-            //System.out.println("class: "+classTable.currClassName+", "+name+": "+type_decl);
-            classTable.reportError(this, ClassTable.ERROR_TYPE_NOT_DEF);
+            classTable.reportError(this, String.format(ClassTable.ERROR_TYPE_NOT_DEF, type_decl));
             type_decl = TreeConstants.No_type; // use No_type for undeclared var
         }
         Map<AbstractSymbol, AbstractSymbol> attrToType = classTable.classToAttrMap.get
                                                          (classTable.currClassName);
         if (attrToType.containsKey(name)){
-            //System.out.println("class: "+classTable.currClassName+", "+name+": "+type_decl);
-            classTable.reportError(this, ClassTable.ERROR_VAR_NAME_IN_USE);
+            classTable.reportError(this, String.format(ClassTable.ERROR_VAR_NAME_IN_USE,name));
             type_decl = TreeConstants.No_type; // use No_type for multiple def
         }
         attrToType.put(name, type_decl);
@@ -550,7 +558,8 @@ class attr extends Feature {
 
         AbstractSymbol assigned_type = init.computeType(classTable);
         if (!classTable.isSubtype(type_decl, assigned_type)){
-            classTable.reportError(this, ClassTable.ERROR_ASSIGN_TYPE_MISMATCH);
+            classTable.reportError(this, String.format(ClassTable.ERROR_ASSIGN_TYPE_MISMATCH, 
+                                                       assigned_type, type_decl));
         }
         /* Exit scope */
         classTable.localVarToType.enterScope();
@@ -597,20 +606,18 @@ class formalc extends Formal {
 
         /* Validate formal param type */
         if (!classTable.isValidType(type_decl)){
-            classTable.reportError(this, ClassTable.ERROR_TYPE_NOT_DEF);
+            classTable.reportError(this, String.format(classTable.ERROR_TYPE_NOT_DEF, type_decl));
             type_decl = TreeConstants.No_type;
         }
         if (type_decl.equals(TreeConstants.SELF_TYPE)){
             classTable.reportError(this, ClassTable.ERROR_TYPE_SELF_TYPE);
             type_decl = TreeConstants.No_type;
         }
-        //System.out.println("class: "+classTable.currClassName+", "+name+": "+type_decl);
         return type_decl;
     }
 
     /* Add to scope */
     public void scopeFormalParams(ClassTable classTable){
-        //System.out.println("class: "+classTable.currClassName+", "+name+": "+type_decl);
         classTable.localVarToType.addId(name, type_decl);
     }
 
@@ -660,12 +667,17 @@ class branch extends Case {
         
         /* Make sure type is valid */
         if (!classTable.isValidType(type_decl)){
-            classTable.reportError(this, classTable.ERROR_TYPE_NOT_DEF);
+            classTable.reportError(this, String.format(classTable.ERROR_TYPE_NOT_DEF, type_decl));
             type_decl = TreeConstants.No_type;
         }
         /* Check to ensure case types are not repeated */
         else if (classTable.caseTypes.contains(type_decl)){
-            classTable.reportError(this, classTable.ERROR_CASE_TYPE_IN_USE);
+            classTable.reportError(this, String.format(classTable.ERROR_CASE_TYPE_IN_USE, type_decl));
+            type_decl = TreeConstants.No_type;
+        }
+        /* Cannot allow SELF_TYPE in case statement */
+        else if (type_decl.equals(TreeConstants.SELF_TYPE)){
+            classTable.reportError(this, String.format(classTable.ERROR_TYPE_SELF_TYPE));
             type_decl = TreeConstants.No_type;
         }
         /* Process case expression */
@@ -717,6 +729,9 @@ class assign extends Expression {
 
     public AbstractSymbol computeType(ClassTable classTable){
         
+        /* assigned type */
+        type = expr.computeType(classTable);
+
         /* declared type */
         AbstractSymbol declared_type = null;
         if (classTable.localVarToType.lookup(name) != null)
@@ -725,14 +740,19 @@ class assign extends Expression {
             declared_type = (AbstractSymbol) classTable.classToAttrMap.get(classTable.currClassName).get(name);
         /* obj identifier not found */
         if (declared_type == null){
-            classTable.reportError(this, classTable.ERROR_VAR_NOT_DEFINED); 
+            classTable.reportError(this, String.format(classTable.ERROR_VAR_NOT_DEFINED, name)); 
             type = TreeConstants.No_type;
             return type;
         }
-        /* assigned type */
-        type = expr.computeType(classTable);
+        /* must not assign to self */
+        if (name.equals(TreeConstants.self)){
+            classTable.reportError(this, classTable.ERROR_ASSIGN_TO_SELF);
+            type = TreeConstants.No_type;
+            return type;
+        }
         if (!classTable.isSubtype(declared_type, type)){
-            classTable.reportError(this, classTable.ERROR_ASSIGN_TYPE_MISMATCH); 
+            classTable.reportError(this, String.format(classTable.ERROR_ASSIGN_TYPE_MISMATCH, 
+                                                       type, declared_type)); 
             type = TreeConstants.No_type;
         }
         return type;
@@ -803,7 +823,7 @@ class static_dispatch extends Expression {
         }
         /* Invalid static type */
         if (!classTable.isValidType(type_name)){
-            classTable.reportError(this, classTable.ERROR_TYPE_NOT_DEF);
+            classTable.reportError(this, String.format(classTable.ERROR_TYPE_NOT_DEF,type_name));
             type = TreeConstants.No_type;
             return type; // can return, since method signature won't be found
         }
@@ -821,11 +841,12 @@ class static_dispatch extends Expression {
         /* Expression type must be subtype of cast type */
         if (!classTable.isSubtype(type_name, implied_type)){
             // optimistic error recovery: assume correct type is subtype of type_name
-            classTable.reportError(this, classTable.ERROR_TYPE_NOT_SUBTYPE);
+            classTable.reportError(this, String.format(classTable.ERROR_TYPE_NOT_SUBTYPE,
+                                   implied_type, type_name));
         }
         /* Method name not found */
         if (!classTable.classToMethodMap.get(type_name).containsKey(name)){
-            classTable.reportError(this, classTable.ERROR_METHOD_NOT_DEFINED);
+            classTable.reportError(this, String.format(classTable.ERROR_METHOD_NOT_DEFINED, name));
             type = TreeConstants.No_type;
             return type; // can return, since method signature won't be found
         } 
@@ -833,11 +854,15 @@ class static_dispatch extends Expression {
         /* Process method param expressions */
         List<AbstractSymbol> exp_method_sign = (List<AbstractSymbol>) classTable.classToMethodMap
                                                                       .get(type_name).get(name);
-        for (int i = 0; i < actual.getLength(); i++){
-            if (!classTable.isSubtype(exp_method_sign.get(i), param_types.get(i))){
-                classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+        if (exp_method_sign.size()-1 != actual.getLength())
+            classTable.reportError(this, String.format(classTable.ERROR_WRONG_NUMBER_OF_ARGS, name));
+        else 
+            for (int i = 0; i < actual.getLength(); i++){
+                if (!classTable.isSubtype(exp_method_sign.get(i), param_types.get(i))){
+                    classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH, 
+                                           exp_method_sign.get(i), param_types.get(i)));
+                }
             }
-        }
         /* compute return type, accounting for SELF_TYPE */
         type = exp_method_sign.get(exp_method_sign.size()-1);
         if (type.equals(TreeConstants.SELF_TYPE))
@@ -910,9 +935,8 @@ class dispatch extends Expression {
             return type; // can return, since method signature won't be found
         }
         /* Method name not found */
-        //System.out.println(implied_type);
         if (!classTable.classToMethodMap.get(implied_type).containsKey(name)){
-            classTable.reportError(this, classTable.ERROR_METHOD_NOT_DEFINED);
+            classTable.reportError(this, String.format(classTable.ERROR_METHOD_NOT_DEFINED, name));
             type = TreeConstants.No_type;
             return type; // can return, since method signature won't be found
         } 
@@ -921,7 +945,8 @@ class dispatch extends Expression {
                                                                       .get(implied_type).get(name);
         for (int i = 0; i < actual.getLength(); i++){
             if (!classTable.isSubtype(exp_method_sign.get(i), param_types.get(i))){
-                classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+                classTable.reportError( this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH, 
+                                        exp_method_sign.get(i), param_types.get(i)));
             }
         }
         /* compute return type, accounting for SELF_TYPE */
@@ -976,7 +1001,8 @@ class cond extends Expression {
         /* Test predicate */
         AbstractSymbol pred_type = pred.computeType(classTable);
         if (!pred_type.equals(TreeConstants.Bool)){
-            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+            classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH,
+                                   TreeConstants.Bool, pred_type));
         }
         /* Find least upper bound */
         AbstractSymbol then_type = then_exp.computeType(classTable);
@@ -1025,9 +1051,9 @@ class loop extends Expression {
     public AbstractSymbol computeType(ClassTable classTable){
         
         AbstractSymbol pred_type = pred.computeType(classTable);
-        //System.out.println(pred_type);
         if (!pred_type.equals(TreeConstants.Bool))
-            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+            classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH,
+                                   TreeConstants.Bool, pred_type));
         /* process body of loop */
         body.computeType(classTable);
 
@@ -1181,11 +1207,12 @@ class let extends Expression {
 
         /* Make sure assignment is valid */
         if (!classTable.isValidType(type_decl)){
-            classTable.reportError(this, classTable.ERROR_TYPE_NOT_DEF);
+            classTable.reportError(this, String.format(classTable.ERROR_TYPE_NOT_DEF, type_decl));
             type_decl = TreeConstants.No_type;
         }
         if (!classTable.isSubtype(type_decl, init_type)){
-            classTable.reportError(this, classTable.ERROR_ASSIGN_TYPE_MISMATCH);
+            classTable.reportError(this, String.format(classTable.ERROR_ASSIGN_TYPE_MISMATCH, 
+                                                       init_type, type_decl));
         }
 
         /* Open scope within let statement */
@@ -1240,8 +1267,12 @@ class plus extends Expression {
         AbstractSymbol e1Type = e1.computeType(classTable);
         AbstractSymbol e2Type = e2.computeType(classTable);
 
-        if (!e1Type.equals(TreeConstants.Int) || !e2Type.equals(TreeConstants.Int))
-            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+        if (!e1Type.equals(TreeConstants.Int)) 
+            classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH,
+                                   TreeConstants.Int, e1Type));
+        if (!e2Type.equals(TreeConstants.Int))
+            classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH,
+                                   TreeConstants.Int, e2Type));
 
         /* Return int, regardless of error or not */
         type = TreeConstants.Int;
@@ -1289,8 +1320,12 @@ class sub extends Expression {
         AbstractSymbol e1Type = e1.computeType(classTable);
         AbstractSymbol e2Type = e2.computeType(classTable);
 
-        if (!e1Type.equals(TreeConstants.Int) || !e2Type.equals(TreeConstants.Int))
-            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+        if (!e1Type.equals(TreeConstants.Int)) 
+            classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH,
+                                   TreeConstants.Int, e1Type));
+        if (!e2Type.equals(TreeConstants.Int))
+            classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH,
+                                   TreeConstants.Int, e2Type));
 
         /* Return int, regardless of error or not */
         type = TreeConstants.Int;
@@ -1338,8 +1373,13 @@ class mul extends Expression {
         AbstractSymbol e1Type = e1.computeType(classTable);
         AbstractSymbol e2Type = e2.computeType(classTable);
 
-        if (!e1Type.equals(TreeConstants.Int) || !e2Type.equals(TreeConstants.Int))
-            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+        if (!e1Type.equals(TreeConstants.Int)) 
+            classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH,
+                                   TreeConstants.Int, e1Type));
+        if (!e2Type.equals(TreeConstants.Int))
+            classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH,
+                                   TreeConstants.Int, e2Type));
+
 
         /* Return int, regardless of error or not */
         type = TreeConstants.Int;
@@ -1387,8 +1427,13 @@ class divide extends Expression {
         AbstractSymbol e1Type = e1.computeType(classTable);
         AbstractSymbol e2Type = e2.computeType(classTable);
 
-        if (!e1Type.equals(TreeConstants.Int) || !e2Type.equals(TreeConstants.Int))
-            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+        if (!e1Type.equals(TreeConstants.Int)) 
+            classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH,
+                                   TreeConstants.Int, e1Type));
+        if (!e2Type.equals(TreeConstants.Int))
+            classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH,
+                                   TreeConstants.Int, e2Type));
+
 
         /* Return int, regardless of error or not */
         type = TreeConstants.Int;
@@ -1430,9 +1475,9 @@ class neg extends Expression {
     public AbstractSymbol computeType(ClassTable classTable){
         AbstractSymbol e1Type = e1.computeType(classTable);
 
-        if (!e1Type.equals(TreeConstants.Int))
-            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
-
+        if (!e1Type.equals(TreeConstants.Int)) 
+            classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH,
+                                   TreeConstants.Int, e1Type));
         /* Return bool, regardless of error or not */
         type = TreeConstants.Int;
         return type;
@@ -1479,8 +1524,12 @@ class lt extends Expression {
         AbstractSymbol e1Type = e1.computeType(classTable);
         AbstractSymbol e2Type = e2.computeType(classTable);
 
-        if (!e1Type.equals(TreeConstants.Int) || !e2Type.equals(TreeConstants.Int))
-            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+        if (!e1Type.equals(TreeConstants.Int)) 
+            classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH,
+                                   TreeConstants.Int, e1Type));
+        if (!e2Type.equals(TreeConstants.Int))
+            classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH,
+                                   TreeConstants.Int, e2Type));
 
         /* Return bool, regardless of error or not */
         type = TreeConstants.Bool;
@@ -1580,9 +1629,12 @@ class leq extends Expression {
         AbstractSymbol e1Type = e1.computeType(classTable);
         AbstractSymbol e2Type = e2.computeType(classTable);
 
-        if (!e1Type.equals(TreeConstants.Int) || !e2Type.equals(TreeConstants.Int))
-            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
-
+        if (!e1Type.equals(TreeConstants.Int)) 
+            classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH,
+                                   TreeConstants.Int, e1Type));
+        if (!e2Type.equals(TreeConstants.Int))
+            classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH,
+                                   TreeConstants.Int, e2Type));
         /* Return bool, regardless of error or not */
         type = TreeConstants.Bool;
         return type;
@@ -1623,8 +1675,9 @@ class comp extends Expression {
     public AbstractSymbol computeType(ClassTable classTable){
         AbstractSymbol e1Type = e1.computeType(classTable);
 
-        if (!e1Type.equals(TreeConstants.Bool) )
-            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+        if (!e1Type.equals(TreeConstants.Bool)) 
+            classTable.reportError(this, String.format(classTable.ERROR_ARG_TYPE_MISMATCH,
+                                   TreeConstants.Bool, e1Type));
 
         /* Return bool, regardless of error or not */
         type = TreeConstants.Bool;
@@ -1783,7 +1836,7 @@ class new_ extends Expression {
         if (classTable.isValidType(type_name))
             return type_name; 
         /* type not found */
-        classTable.reportError(this, classTable.ERROR_TYPE_NOT_DEF);
+        classTable.reportError(this, String.format(classTable.ERROR_TYPE_NOT_DEF, type_name));
         type = TreeConstants.No_type;
         return type;
     }
@@ -1904,7 +1957,7 @@ class object extends Expression {
             return type;
         }
         /* Object identifier not found */
-        classTable.reportError(this, classTable.ERROR_VAR_NOT_DEFINED);
+        classTable.reportError(this, String.format(classTable.ERROR_VAR_NOT_DEFINED, name));
         type = TreeConstants.No_type;
         return type;
     }

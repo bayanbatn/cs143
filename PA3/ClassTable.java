@@ -26,21 +26,23 @@ class ClassTable {
     public Set<AbstractSymbol> caseTypes;                   /* Set of distinct types of case stmt */
 
     /* Error messages */
-    // TODO: organize these better
-    public static final String ERROR_TYPE_NOT_DEF = "Error: parameter type not defined";
-    public static final String ERROR_VAR_NAME_IN_USE = "Error: variable name in use";
-    public static final String ERROR_VAR_NOT_DEFINED = "Error: undefined variable";
-    public static final String ERROR_METHOD_NOT_DEFINED = "Error: undefined method";
+    public static final String ERROR_TYPE_NOT_DEF = "Error: parameter type %s not defined";
+    public static final String ERROR_VAR_NAME_IN_USE = "Error: variable name %s in use";
+    public static final String ERROR_VAR_NOT_DEFINED = "Error: undefined variable %s";
+    public static final String ERROR_METHOD_NOT_DEFINED = "Error: undefined method %s";
+    public static final String ERROR_METHOD_SIGN_MISMATCH = "Error: unexpected method signature for %s";
     public static final String ERROR_TYPE_SELF_TYPE = "Error: parameter type cannot be SELF_TYPE";
-    public static final String ERROR_INVALID_RET_TYPE = "Error: invalid method return type";
+    public static final String ERROR_INVALID_RET_TYPE = "Error: invalid return type for method %s";
     public static final String ERROR_MAIN_NO_MAIN_METHOD = "Error: Main class must define main method";
-    public static final String ERROR_ASSIGN_TYPE_MISMATCH = "Error: assignment type incompatible";
-    public static final String ERROR_RET_TYPE_MISMATCH = "Error: mismatch with expected and" +
-                                                         "actual return types";
-    public static final String ERROR_ARG_TYPE_MISMATCH = "Error: argument type not allowed";
-    public static final String ERROR_CASE_TYPE_IN_USE = "Error: case branch type in use already";
-    public static final String ERROR_UNKNOWN_RET_TYPE = "Error: unknown return type";
-    public static final String ERROR_TYPE_NOT_SUBTYPE = "Error: cannot cast to non-supertype";
+    public static final String ERROR_ASSIGN_TYPE_MISMATCH = "Error: cannot assign type %s to type %s";
+    public static final String ERROR_RET_TYPE_MISMATCH = "Error: cannot return type %s to expected type %s";
+    public static final String ERROR_ARG_TYPE_MISMATCH = "Error: expected type: %s, got type: %s";
+    public static final String ERROR_CASE_TYPE_IN_USE = "Error: case branch type %s in use already";
+    public static final String ERROR_UNKNOWN_RET_TYPE = "Error: unknown (no_type) return type";
+    public static final String ERROR_TYPE_NOT_SUBTYPE = "Error: cannot cast type %s to non-supertype %s";
+    public static final String ERROR_ASSIGN_TO_SELF = "Error: cannot assign to self variable";
+    public static final String ERROR_WRONG_NUMBER_OF_ARGS = "Erro: Method %s invoked with wrong"+ 
+                                                            "number of args";
 
 
     /** Creates data structures representing basic Cool classes (Object,
@@ -245,25 +247,19 @@ class ClassTable {
         /* Add the rest of the class types into the graph */
         for (int i = 0; i < cls.getLength(); i++){
             class_c class_node = (class_c) cls.getNth(i);
-            if (nameToClass.containsKey(class_node.getName())){
-                errorStream.println("Error: duplicate class name");
-                semantError(class_node);
-                return;
-            }
-            nameToClass.put(class_node.getName(), class_node);
-
+            if (nameToClass.containsKey(class_node.getName()) || class_node.getName().equals(TreeConstants.SELF_TYPE))
+                semantError(class_node).println("Redefinition of existing class "+class_node.getName());
             /* Make sure inheritence is not from Int, String, or Bool */
-            if (uninheritable.contains(class_node.getParent())){
-                errorStream.println("Error: inheritence from this parent class not allowed");
-                semantError(class_node);
-                return;
+            else if (uninheritable.contains(class_node.getParent()))
+                semantError(class_node).println("Class "+class_node.getName()+
+                                                " cannot inherit class "+class_node.getParent());
+            else {
+                nameToClass.put(class_node.getName(), class_node);
+                /* Include class in inheritance graph */
+                if (!inheritance.containsKey(class_node.getParent()))
+                    inheritance.put(class_node.getParent(), new HashSet<AbstractSymbol>());
+                inheritance.get(class_node.getParent()).add(class_node.getName());
             }
-
-            /* Include class in inheritance graph */
-            if (!inheritance.containsKey(class_node.getParent()))
-                inheritance.put(class_node.getParent(), new HashSet<AbstractSymbol>());
-
-            inheritance.get(class_node.getParent()).add(class_node.getName());
         }
 
         /* Validate inheritance tree structure */
@@ -272,43 +268,30 @@ class ClassTable {
         stack.push(TreeConstants.Object_);
         int class_cnt = 0; // accounts for the Object class
 
-
-        if (Flags.semant_debug) 
-            System.out.println("Printing out inheritence graph. Number of classes: "+nameToClass.size());
-
         while(!stack.isEmpty()){
             AbstractSymbol curr = stack.pop();
             reachable.add(curr);
             class_cnt++;
 
-            if (Flags.semant_debug) System.out.print(curr+" => ");
-            
             if (inheritance.containsKey(curr))
                 for (AbstractSymbol next : inheritance.get(curr)){
                     stack.push(next);
-                    if (Flags.semant_debug) System.out.print(next+", ");
                 }
-            if (Flags.semant_debug) System.out.print("\n");
         }
 
         /* Check for cycles and disjoint sections within inheritance graph */
         if (class_cnt < nameToClass.size()){
-            errorStream.println("Error: some classes are not part of inheritance tree");
             Set<AbstractSymbol> keys = nameToClass.keySet(); // set of all defined class names
             keys.removeAll(reachable); // keep only the unreachable nodes
             for (AbstractSymbol class_name : keys){
-                errorStream.print(class_name + " at ");
-                semantError(nameToClass.get(class_name));
-                errorStream.print("\n");
+                semantError(nameToClass.get(class_name)).println("Class "+class_name+" is not part of class tree");
             }
-            return;
         }
 
         /* Make sure a Main class is defined */
         if (!nameToClass.containsKey(TreeConstants.Main)){
-            errorStream.println("Error: must define Main class");
-            semantError();
-            return;
+            errorStream.println("Class Main is not defined");
+            /* continue if Main is the only error in class hiererchy */
         }
 
     }
@@ -467,8 +450,8 @@ class ClassTable {
 
     /* Error reporting interface */
     public void reportError(TreeNode t, String errMsg){
-        errorStream.println(errMsg);
-        semantError(nameToClass.get(currClassName).getFilename(), t);
+        semantError(nameToClass.get(currClassName).getFilename(), t)
+                   .println(errMsg);
     }
 
     /** Prints line number and file name of the given class.
