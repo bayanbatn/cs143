@@ -18,11 +18,30 @@ class ClassTable {
      * for scoping and type checking. Made public for the sake of
      * painlessly passing the necessary data strcutures around
      * as arguments  through one object (ClassTable)*/
-    public SymbolTable localVarTypeTable;               /* Handles var scoping and types */
+    public SymbolTable localVarToType;                      /* Handles var scoping and types */
     public Map<AbstractSymbol, HashMap> classToAttrMap;     /* Maps class name to its attr map */
     public Map<AbstractSymbol, HashMap> classToMethodMap;   /* Maps class name to its method map */
-    public AbstractSymbol currClassName;                /* Pointer to class we are currently
-                                                           processing with type checking */
+    public AbstractSymbol currClassName;                    /* Pointer to class we are currently
+                                                               processing with type checking */
+    public Set<AbstractSymbol> caseTypes;                   /* Set of distinct types of case stmt */
+
+    /* Error messages */
+    // TODO: organize these better
+    public static final String ERROR_TYPE_NOT_DEF = "Error: parameter type not defined";
+    public static final String ERROR_VAR_NAME_IN_USE = "Error: variable name in use";
+    public static final String ERROR_VAR_NOT_DEFINED = "Error: undefined variable";
+    public static final String ERROR_METHOD_NOT_DEFINED = "Error: undefined method";
+    public static final String ERROR_TYPE_SELF_TYPE = "Error: parameter type cannot be SELF_TYPE";
+    public static final String ERROR_INVALID_RET_TYPE = "Error: invalid method return type";
+    public static final String ERROR_MAIN_NO_MAIN_METHOD = "Error: Main class must define main method";
+    public static final String ERROR_ASSIGN_TYPE_MISMATCH = "Error: assignment type incompatible";
+    public static final String ERROR_RET_TYPE_MISMATCH = "Error: mismatch with expected and" +
+                                                         "actual return types";
+    public static final String ERROR_ARG_TYPE_MISMATCH = "Error: argument type not allowed";
+    public static final String ERROR_CASE_TYPE_IN_USE = "Error: case branch type in use already";
+    public static final String ERROR_UNKNOWN_RET_TYPE = "Error: unknown return type";
+    public static final String ERROR_TYPE_NOT_SUBTYPE = "Error: cannot cast to non-supertype";
+
 
     /** Creates data structures representing basic Cool classes (Object,
      * IO, Int, Bool, String).  Please note: as is this method does not
@@ -201,6 +220,7 @@ class ClassTable {
         uninheritable.add(Int_class.getName());
         uninheritable.add(Str_class.getName());
         uninheritable.add(Bool_class.getName());
+        uninheritable.add(TreeConstants.SELF_TYPE);
     }
 	
     public ClassTable(Classes cls) {
@@ -213,12 +233,13 @@ class ClassTable {
         uninheritable = new ArrayList<AbstractSymbol>();
 
         /* Init data structures for var scoping and type checking */
-        localVarTypeTable = new SymbolTable();
+        localVarToType = new SymbolTable();
         classToAttrMap = new HashMap<AbstractSymbol, HashMap>();
         classToMethodMap = new HashMap<AbstractSymbol, HashMap>();
         currClassName = null;
+        caseTypes = new HashSet<AbstractSymbol>();
 
-        if (Flags.semant_debug) System.out.println("Installing basic classes");
+        /* Initialize basic classes into hiererchy */
         installBasicClasses();
 
         /* Add the rest of the class types into the graph */
@@ -270,7 +291,7 @@ class ClassTable {
             if (Flags.semant_debug) System.out.print("\n");
         }
 
-        /* Check for cycles within inheritance graph */
+        /* Check for cycles and disjoint sections within inheritance graph */
         if (class_cnt < nameToClass.size()){
             errorStream.println("Error: some classes are not part of inheritance tree");
             Set<AbstractSymbol> keys = nameToClass.keySet(); // set of all defined class names
@@ -286,6 +307,7 @@ class ClassTable {
         /* Make sure a Main class is defined */
         if (!nameToClass.containsKey(TreeConstants.Main)){
             errorStream.println("Error: must define Main class");
+            semantError();
             return;
         }
 
@@ -299,9 +321,14 @@ class ClassTable {
             return s2;
         if (s2.equals(TreeConstants.No_type))
             return s1;
+        /* LUB of SELF_TYPEs is SELF_TYPE */
+        if (s1.equals(TreeConstants.SELF_TYPE) && s2.equals(TreeConstants.SELF_TYPE))
+            return TreeConstants.SELF_TYPE;
 
         /* find LUB */
         AbstractSymbol curr = s1;
+        if (s1.equals(TreeConstants.SELF_TYPE))
+            curr = currClassName;
         List<AbstractSymbol> s1SuperTypes = new ArrayList<AbstractSymbol>();
 
         /* traverse up tree from s1 */
@@ -311,6 +338,8 @@ class ClassTable {
         }
 
         curr = s2;
+        if (s2.equals(TreeConstants.SELF_TYPE))
+            curr = currClassName;
         while (!curr.equals(TreeConstants.No_class)){
             if (s1SuperTypes.contains(curr))
                 /* always returns here */
@@ -320,6 +349,7 @@ class ClassTable {
         }
 
         errorStream.println("Should not reach this far");
+        semantError();
         return null;
     }
 
@@ -327,11 +357,17 @@ class ClassTable {
     public boolean isSubtype(AbstractSymbol type, AbstractSymbol subtype){
         
         /* No_type is subtype of everything */
-        // TODO: what about type = No_type
         if (subtype.equals(TreeConstants.No_type))
             return true; 
-
+        /* Handle SELF_TYPEs */
+        if (type.equals(TreeConstants.SELF_TYPE) && subtype.equals(TreeConstants.SELF_TYPE))
+            return true;
+        if (type.equals(TreeConstants.SELF_TYPE) && !subtype.equals(TreeConstants.SELF_TYPE))
+            return false;
+        
         AbstractSymbol curr = subtype;
+        if (subtype.equals(TreeConstants.SELF_TYPE))
+            curr = currClassName;
 
         /* Traverse up the tree */
         while (!curr.equals(TreeConstants.No_class)){
@@ -347,15 +383,11 @@ class ClassTable {
     public boolean isValidType(AbstractSymbol type){
         if (type.equals(TreeConstants.No_type))
             return true;
+        if (type.equals(TreeConstants.SELF_TYPE)) // TODO: think about this more
+            return true;
         if (type.equals(TreeConstants.prim_slot))
             return true;
         return nameToClass.containsKey(type);
-    }
-
-    public AbstractSymbol getClassFilename(){
-        if (currClassName == null)
-            return null;
-        return nameToClass.get(currClassName).getFilename();
     }
 
     public void doTypeCheck(){
@@ -378,6 +410,21 @@ class ClassTable {
                 }
         }
 
+        /* Second traversal */
+        stack.push(TreeConstants.Object_);
+        while(!stack.isEmpty()){
+            AbstractSymbol curr = stack.pop();
+            class_c class_node = nameToClass.get(curr);
+
+            /* Extract attribute and method type info */ 
+            currClassName = curr;
+            class_node.checkAttrAndMethodTypes(this); 
+
+            if (inheritance.containsKey(curr))
+                for (AbstractSymbol next : inheritance.get(curr)){
+                    stack.push(next);
+                }
+        }
 
         dumpDebugInfo();
     }
@@ -468,11 +515,5 @@ class ClassTable {
     public boolean errors() {
 	return semantErrors != 0;
     }
-
-    public static final String ERROR_TYPE_NOT_DEF = "Error: parameter type not defined";
-    public static final String ERROR_VAR_NAME_IN_USE = "Error: variable name in use";
-    public static final String ERROR_TYPE_SELF_TYPE = "Error: parameter type cannot be SELF_TYPE";
-    public static final String ERROR_INVALID_RET_TYPE = "Error: invalid method return type";
-    public static final String ERROR_MAIN_NO_MAIN_METHOD = "Error: Main class must define main method";
 }
 

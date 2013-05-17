@@ -38,7 +38,7 @@ class H inherits IO {
     b : String;
 
     foo () : String {
-:       in_string()
+       in_string()
     };
 };
 

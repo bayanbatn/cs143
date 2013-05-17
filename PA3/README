@@ -233,7 +233,25 @@ self and SELF_TYPE - TODO, check when it can be used, translate all SELF-TYPE to
 modify the mappings to keep these up to date
 
 TODO: NO_TYPE
+things to watch out for:
+make sure all expressions are evaluated, regardless of error
+make sure NO_TYPE is checked for all returning expression types
 
+choosing to use NO_TYPE vs. other types
+in certain error cases, it's better for error recovery to use
+types other than NO_TYPE. Such as in the case of boolean or
+integer operations. There are also cases where we know the expected
+type, such as with static dispath, when obj type evals to NO_TYPE
+
+There are also cases when type error is detected on method params 
+that are irrelevant to the final return type. In those cases,
+instead of returning NO_TYPE, we return the actual type. This,
+I believe, is strictly better and more accurate in terms of error
+recovery.
+
+For no_expr, we assign No_type, since that is guaranteed to be 
+compatible with whatever constraints there may be on the output 
+of the expression (i.e. with variable initialization). 
 
 =========================================
 scoping:
@@ -256,3 +274,7 @@ declare error if trying to overwire self
 traversing the tree:
 - 
 
+
+error recovery question:
+should i recover from error using boolean or int types instead of no_type 
+in certain expressions?

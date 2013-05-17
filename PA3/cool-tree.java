@@ -139,7 +139,7 @@ abstract class Expression extends TreeNode {
     protected Expression(int lineNumber) {
         super(lineNumber);
     }
-    private AbstractSymbol type = null;                                 
+    protected AbstractSymbol type = null;                                 
     public AbstractSymbol get_type() { return type; }           
     public Expression set_type(AbstractSymbol s) { type = s; return this; } 
     public abstract void dump_with_types(PrintStream out, int n);
@@ -149,6 +149,7 @@ abstract class Expression extends TreeNode {
         else
             { out.println(Utilities.pad(n) + ": _no_type"); }
     }
+    public AbstractSymbol computeType(ClassTable classTable) { return null; }
 
 }
 
@@ -266,18 +267,23 @@ class programc extends Program {
     */
     public void semant() {
 	/* ClassTable constructor may do some semantic analysis */
+
+        /* Phase 1: Build inheritence graph */
 	ClassTable classTable = new ClassTable(classes);
-        classTable.doTypeCheck();
-        
 	if (classTable.errors()) {
 	    System.err.println("Compilation halted due to static semantic errors.");
 	    System.exit(1);
 	}
+        /* Phase 2: Perform type checking */
+        classTable.doTypeCheck();
+	if (classTable.errors()) {
+	    System.err.println("Compilation halted due to static semantic errors.");
+	    System.exit(1);
+	} else {
+            dump_with_types(System.err, 0);
+        }
+        
     }
-
-    
-
-    
 
 }
 
@@ -335,6 +341,7 @@ class class_c extends Class_ {
         out.println(Utilities.pad(n + 2) + ")");
     }
 
+    /* First traversal through the program */
     public void findAttrAndMethodTypes(ClassTable classTable){
 
         /* Maps attributes to their types */
@@ -369,6 +376,21 @@ class class_c extends Class_ {
         if (name.equals(TreeConstants.Main) && !methodToSignature.containsKey(TreeConstants.main_meth)){
             classTable.reportError(this, ClassTable.ERROR_MAIN_NO_MAIN_METHOD);
             return;
+        }
+    }
+
+    /* Second traversal through the program */
+    public void checkAttrAndMethodTypes(ClassTable classTable){
+
+        //System.out.println("Type checking starts now");
+        /* Iterate through features */
+        for (Enumeration e = features.getElements(); e.hasMoreElements();) {
+            Feature f = (Feature) e.nextElement();
+            /* Check feature type at runtime */
+            if (method.class.isAssignableFrom(f.getClass()))
+                ((method) f).checkMethodSignature(classTable);
+            else
+                ((attr) f).checkAttrType(classTable);
         }
     }
 
@@ -431,7 +453,7 @@ class method extends Feature {
             signature.add(formalType);
         }
         /* Validate return type */
-        if (!classTable.isValidType(return_type) && !return_type.equals(TreeConstants.SELF_TYPE)){
+        if (!classTable.isValidType(return_type)){
             classTable.reportError(this, ClassTable.ERROR_INVALID_RET_TYPE);
             return_type = TreeConstants.No_type;
         }
@@ -440,6 +462,25 @@ class method extends Feature {
         Map<AbstractSymbol, List> methodToSignature = classTable.classToMethodMap
                                                       .get(classTable.currClassName);
         methodToSignature.put(name, signature); 
+    }
+
+    /* Validate method signature */
+    public void checkMethodSignature(ClassTable classTable){
+        
+        classTable.localVarToType.enterScope();
+
+        /* Collect type information from formals */
+        for (Enumeration e = formals.getElements(); e.hasMoreElements();) {
+            ((formalc) e.nextElement()).scopeFormalParams(classTable);
+        }
+        
+        /* verify final type compatibility */
+        AbstractSymbol assigned_type = expr.computeType(classTable);
+        if (!classTable.isSubtype(return_type, assigned_type)){
+            classTable.reportError(this, ClassTable.ERROR_RET_TYPE_MISMATCH);
+        }
+        
+        classTable.localVarToType.exitScope();
     }
 }
 
@@ -486,19 +527,33 @@ class attr extends Feature {
     /* Extract attribute type info */
     public void extractAttrType(ClassTable classTable){
         
-        if (!classTable.isValidType(type_decl) && !type_decl.equals(TreeConstants.SELF_TYPE)){
-            System.out.println("class: "+classTable.currClassName+", "+name+": "+type_decl);
+        if (!classTable.isValidType(type_decl)){
+            //System.out.println("class: "+classTable.currClassName+", "+name+": "+type_decl);
             classTable.reportError(this, ClassTable.ERROR_TYPE_NOT_DEF);
             type_decl = TreeConstants.No_type; // use No_type for undeclared var
         }
         Map<AbstractSymbol, AbstractSymbol> attrToType = classTable.classToAttrMap.get
                                                          (classTable.currClassName);
         if (attrToType.containsKey(name)){
-            System.out.println("class: "+classTable.currClassName+", "+name+": "+type_decl);
+            //System.out.println("class: "+classTable.currClassName+", "+name+": "+type_decl);
             classTable.reportError(this, ClassTable.ERROR_VAR_NAME_IN_USE);
             type_decl = TreeConstants.No_type; // use No_type for multiple def
         }
         attrToType.put(name, type_decl);
+    }
+
+    /* Validate attribute type */
+    public void checkAttrType(ClassTable classTable){
+        
+        /* Enter scope, even though there's nothing in the stack */
+        classTable.localVarToType.enterScope();
+
+        AbstractSymbol assigned_type = init.computeType(classTable);
+        if (!classTable.isSubtype(type_decl, assigned_type)){
+            classTable.reportError(this, ClassTable.ERROR_ASSIGN_TYPE_MISMATCH);
+        }
+        /* Exit scope */
+        classTable.localVarToType.enterScope();
     }
 }
 
@@ -541,17 +596,22 @@ class formalc extends Formal {
     public AbstractSymbol extractFormalType(ClassTable classTable){
 
         /* Validate formal param type */
-        if (type_decl.equals(TreeConstants.SELF_TYPE)){
-            System.out.println("class: "+classTable.currClassName+", "+name+": "+type_decl);
-            classTable.reportError(this, ClassTable.ERROR_TYPE_SELF_TYPE);
-            type_decl = TreeConstants.No_type;
-        }
         if (!classTable.isValidType(type_decl)){
-            System.out.println("class: "+classTable.currClassName+", "+name+": "+type_decl);
             classTable.reportError(this, ClassTable.ERROR_TYPE_NOT_DEF);
             type_decl = TreeConstants.No_type;
         }
+        if (type_decl.equals(TreeConstants.SELF_TYPE)){
+            classTable.reportError(this, ClassTable.ERROR_TYPE_SELF_TYPE);
+            type_decl = TreeConstants.No_type;
+        }
+        //System.out.println("class: "+classTable.currClassName+", "+name+": "+type_decl);
         return type_decl;
+    }
+
+    /* Add to scope */
+    public void scopeFormalParams(ClassTable classTable){
+        //System.out.println("class: "+classTable.currClassName+", "+name+": "+type_decl);
+        classTable.localVarToType.addId(name, type_decl);
     }
 
 }
@@ -596,6 +656,27 @@ class branch extends Case {
 	expr.dump_with_types(out, n + 2);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        
+        /* Make sure type is valid */
+        if (!classTable.isValidType(type_decl)){
+            classTable.reportError(this, classTable.ERROR_TYPE_NOT_DEF);
+            type_decl = TreeConstants.No_type;
+        }
+        /* Check to ensure case types are not repeated */
+        else if (classTable.caseTypes.contains(type_decl)){
+            classTable.reportError(this, classTable.ERROR_CASE_TYPE_IN_USE);
+            type_decl = TreeConstants.No_type;
+        }
+        /* Process case expression */
+        classTable.localVarToType.enterScope();
+        classTable.localVarToType.addId(name, type_decl);
+        
+        AbstractSymbol return_type = expr.computeType(classTable);
+        classTable.localVarToType.exitScope();
+
+        return return_type;
+    }
 }
 
 
@@ -634,6 +715,28 @@ class assign extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        
+        /* declared type */
+        AbstractSymbol declared_type = null;
+        if (classTable.localVarToType.lookup(name) != null)
+            declared_type = (AbstractSymbol) classTable.localVarToType.lookup(name);
+        if (classTable.classToAttrMap.get(classTable.currClassName).containsKey(name))
+            declared_type = (AbstractSymbol) classTable.classToAttrMap.get(classTable.currClassName).get(name);
+        /* obj identifier not found */
+        if (declared_type == null){
+            classTable.reportError(this, classTable.ERROR_VAR_NOT_DEFINED); 
+            type = TreeConstants.No_type;
+            return type;
+        }
+        /* assigned type */
+        type = expr.computeType(classTable);
+        if (!classTable.isSubtype(declared_type, type)){
+            classTable.reportError(this, classTable.ERROR_ASSIGN_TYPE_MISMATCH); 
+            type = TreeConstants.No_type;
+        }
+        return type;
+    }
 }
 
 
@@ -686,6 +789,61 @@ class static_dispatch extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+
+        /* Process object type */
+        AbstractSymbol expr_type = expr.computeType(classTable);
+        AbstractSymbol implied_type = expr_type;
+        if (implied_type.equals(TreeConstants.SELF_TYPE))
+            implied_type = classTable.currClassName;
+        /* Process params */
+        List<AbstractSymbol> param_types = new ArrayList<AbstractSymbol>();
+        for (int i = 0; i < actual.getLength(); i++){
+            param_types.add(((Expression) actual.getNth(i)).computeType(classTable)); 
+        }
+        /* Invalid static type */
+        if (!classTable.isValidType(type_name)){
+            classTable.reportError(this, classTable.ERROR_TYPE_NOT_DEF);
+            type = TreeConstants.No_type;
+            return type; // can return, since method signature won't be found
+        }
+        /* Static type can't be SELF_TYPE */
+        if (type_name.equals(TreeConstants.SELF_TYPE)) {
+            classTable.reportError(this, classTable.ERROR_TYPE_SELF_TYPE);
+            type = TreeConstants.No_type;
+            return type; // can return, since method signature won't be found
+        }
+        /* Invalid object type */
+        if (implied_type.equals(TreeConstants.No_type)){
+            // optimistic error recovery: assume correct type is subtype of type_name
+            classTable.reportError(this, classTable.ERROR_UNKNOWN_RET_TYPE);
+        }
+        /* Expression type must be subtype of cast type */
+        if (!classTable.isSubtype(type_name, implied_type)){
+            // optimistic error recovery: assume correct type is subtype of type_name
+            classTable.reportError(this, classTable.ERROR_TYPE_NOT_SUBTYPE);
+        }
+        /* Method name not found */
+        if (!classTable.classToMethodMap.get(type_name).containsKey(name)){
+            classTable.reportError(this, classTable.ERROR_METHOD_NOT_DEFINED);
+            type = TreeConstants.No_type;
+            return type; // can return, since method signature won't be found
+        } 
+
+        /* Process method param expressions */
+        List<AbstractSymbol> exp_method_sign = (List<AbstractSymbol>) classTable.classToMethodMap
+                                                                      .get(type_name).get(name);
+        for (int i = 0; i < actual.getLength(); i++){
+            if (!classTable.isSubtype(exp_method_sign.get(i), param_types.get(i))){
+                classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+            }
+        }
+        /* compute return type, accounting for SELF_TYPE */
+        type = exp_method_sign.get(exp_method_sign.size()-1);
+        if (type.equals(TreeConstants.SELF_TYPE))
+            type = expr_type; //WARNING: this can be No_type if expr was buggy
+        return type;
+    }
 }
 
 
@@ -733,8 +891,46 @@ class dispatch extends Expression {
 	dump_type(out, n);
     }
 
-}
+    public AbstractSymbol computeType(ClassTable classTable){
 
+        /* Process object type */
+        AbstractSymbol expr_type = expr.computeType(classTable);
+        AbstractSymbol implied_type = expr_type;
+        if (implied_type.equals(TreeConstants.SELF_TYPE))
+            implied_type = classTable.currClassName;
+        /* Process params */
+        List<AbstractSymbol> param_types = new ArrayList<AbstractSymbol>();
+        for (int i = 0; i < actual.getLength(); i++){
+            param_types.add(((Expression)actual.getNth(i)).computeType(classTable)); 
+        }
+        /* Invalid object type */
+        if (implied_type.equals(TreeConstants.No_type)){
+            classTable.reportError(this, classTable.ERROR_UNKNOWN_RET_TYPE);
+            type = TreeConstants.No_type;
+            return type; // can return, since method signature won't be found
+        }
+        /* Method name not found */
+        //System.out.println(implied_type);
+        if (!classTable.classToMethodMap.get(implied_type).containsKey(name)){
+            classTable.reportError(this, classTable.ERROR_METHOD_NOT_DEFINED);
+            type = TreeConstants.No_type;
+            return type; // can return, since method signature won't be found
+        } 
+        /* Process method param expressions */
+        List<AbstractSymbol> exp_method_sign = (List<AbstractSymbol>) classTable.classToMethodMap
+                                                                      .get(implied_type).get(name);
+        for (int i = 0; i < actual.getLength(); i++){
+            if (!classTable.isSubtype(exp_method_sign.get(i), param_types.get(i))){
+                classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+            }
+        }
+        /* compute return type, accounting for SELF_TYPE */
+        type = exp_method_sign.get(exp_method_sign.size()-1);
+        if (type.equals(TreeConstants.SELF_TYPE))
+            type = expr_type;
+        return type;
+    }
+}
 
 /** Defines AST constructor 'cond'.
     <p>
@@ -776,6 +972,18 @@ class cond extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        /* Test predicate */
+        AbstractSymbol pred_type = pred.computeType(classTable);
+        if (!pred_type.equals(TreeConstants.Bool)){
+            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+        }
+        /* Find least upper bound */
+        AbstractSymbol then_type = then_exp.computeType(classTable);
+        AbstractSymbol else_type = else_exp.computeType(classTable);
+        type = classTable.findLeastUpperBound(then_type, else_type);
+        return type;
+    }
 }
 
 
@@ -814,6 +1022,19 @@ class loop extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        
+        AbstractSymbol pred_type = pred.computeType(classTable);
+        //System.out.println(pred_type);
+        if (!pred_type.equals(TreeConstants.Bool))
+            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+        /* process body of loop */
+        body.computeType(classTable);
+
+        /* Loop must return object type */
+        type = TreeConstants.Object_;
+        return type;
+    }
 }
 
 
@@ -854,6 +1075,18 @@ class typcase extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+
+        AbstractSymbol expr_type = expr.computeType(classTable);
+
+        type = TreeConstants.No_type;
+        for (Enumeration e = cases.getElements(); e.hasMoreElements();) {
+            AbstractSymbol case_type = ((branch)e.nextElement()).computeType(classTable);
+            type = classTable.findLeastUpperBound(type, case_type);
+        }
+        classTable.caseTypes.clear();
+        return type;
+    }
 }
 
 
@@ -889,6 +1122,12 @@ class block extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        for (Enumeration e = body.getElements(); e.hasMoreElements();) {
+	    type = ((Expression)e.nextElement()).computeType(classTable);
+        }
+        return type;
+    }
 }
 
 
@@ -937,6 +1176,28 @@ class let extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        AbstractSymbol init_type = init.computeType(classTable);
+
+        /* Make sure assignment is valid */
+        if (!classTable.isValidType(type_decl)){
+            classTable.reportError(this, classTable.ERROR_TYPE_NOT_DEF);
+            type_decl = TreeConstants.No_type;
+        }
+        if (!classTable.isSubtype(type_decl, init_type)){
+            classTable.reportError(this, classTable.ERROR_ASSIGN_TYPE_MISMATCH);
+        }
+
+        /* Open scope within let statement */
+        classTable.localVarToType.enterScope();
+        classTable.localVarToType.addId(identifier, type_decl);
+
+        /* Process rest of the let statement */
+        type = body.computeType(classTable);
+
+        classTable.localVarToType.exitScope();
+        return type;
+    }
 }
 
 
@@ -975,6 +1236,17 @@ class plus extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        AbstractSymbol e1Type = e1.computeType(classTable);
+        AbstractSymbol e2Type = e2.computeType(classTable);
+
+        if (!e1Type.equals(TreeConstants.Int) || !e2Type.equals(TreeConstants.Int))
+            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+
+        /* Return int, regardless of error or not */
+        type = TreeConstants.Int;
+        return type;
+    }
 }
 
 
@@ -1013,6 +1285,17 @@ class sub extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        AbstractSymbol e1Type = e1.computeType(classTable);
+        AbstractSymbol e2Type = e2.computeType(classTable);
+
+        if (!e1Type.equals(TreeConstants.Int) || !e2Type.equals(TreeConstants.Int))
+            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+
+        /* Return int, regardless of error or not */
+        type = TreeConstants.Int;
+        return type;
+    }
 }
 
 
@@ -1051,6 +1334,17 @@ class mul extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        AbstractSymbol e1Type = e1.computeType(classTable);
+        AbstractSymbol e2Type = e2.computeType(classTable);
+
+        if (!e1Type.equals(TreeConstants.Int) || !e2Type.equals(TreeConstants.Int))
+            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+
+        /* Return int, regardless of error or not */
+        type = TreeConstants.Int;
+        return type;
+    }
 }
 
 
@@ -1089,6 +1383,17 @@ class divide extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        AbstractSymbol e1Type = e1.computeType(classTable);
+        AbstractSymbol e2Type = e2.computeType(classTable);
+
+        if (!e1Type.equals(TreeConstants.Int) || !e2Type.equals(TreeConstants.Int))
+            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+
+        /* Return int, regardless of error or not */
+        type = TreeConstants.Int;
+        return type;
+    }
 }
 
 
@@ -1122,6 +1427,16 @@ class neg extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        AbstractSymbol e1Type = e1.computeType(classTable);
+
+        if (!e1Type.equals(TreeConstants.Int))
+            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+
+        /* Return bool, regardless of error or not */
+        type = TreeConstants.Int;
+        return type;
+    }
 }
 
 
@@ -1160,6 +1475,17 @@ class lt extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        AbstractSymbol e1Type = e1.computeType(classTable);
+        AbstractSymbol e2Type = e2.computeType(classTable);
+
+        if (!e1Type.equals(TreeConstants.Int) || !e2Type.equals(TreeConstants.Int))
+            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+
+        /* Return bool, regardless of error or not */
+        type = TreeConstants.Bool;
+        return type;
+    }
 }
 
 
@@ -1198,6 +1524,20 @@ class eq extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        AbstractSymbol e1Type = e1.computeType(classTable);
+        AbstractSymbol e2Type = e2.computeType(classTable);
+
+        if (e1Type.equals(TreeConstants.Int) || e2Type.equals(TreeConstants.Int) ||
+            e1Type.equals(TreeConstants.Bool) || e2Type.equals(TreeConstants.Bool) ||
+            e1Type.equals(TreeConstants.Str) || e2Type.equals(TreeConstants.Str))
+            if (!e1Type.equals(e2Type))
+                classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+
+        /* Return bool, regardless of error or not */
+        type = TreeConstants.Bool;
+        return type;
+    }
 }
 
 
@@ -1236,6 +1576,17 @@ class leq extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        AbstractSymbol e1Type = e1.computeType(classTable);
+        AbstractSymbol e2Type = e2.computeType(classTable);
+
+        if (!e1Type.equals(TreeConstants.Int) || !e2Type.equals(TreeConstants.Int))
+            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+
+        /* Return bool, regardless of error or not */
+        type = TreeConstants.Bool;
+        return type;
+    }
 }
 
 
@@ -1269,6 +1620,16 @@ class comp extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        AbstractSymbol e1Type = e1.computeType(classTable);
+
+        if (!e1Type.equals(TreeConstants.Bool) )
+            classTable.reportError(this, classTable.ERROR_ARG_TYPE_MISMATCH);
+
+        /* Return bool, regardless of error or not */
+        type = TreeConstants.Bool;
+        return type;
+    }
 }
 
 
@@ -1302,6 +1663,10 @@ class int_const extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        type = TreeConstants.Int;
+        return type;
+    }
 }
 
 
@@ -1333,6 +1698,11 @@ class bool_const extends Expression {
         out.println(Utilities.pad(n) + "_bool");
 	dump_Boolean(out, n + 2, val);
 	dump_type(out, n);
+    }
+
+    public AbstractSymbol computeType(ClassTable classTable){
+        type = TreeConstants.Bool;
+        return type; 
     }
 
 }
@@ -1370,6 +1740,11 @@ class string_const extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        type = TreeConstants.Str;
+        return type;
+    }
+
 }
 
 
@@ -1401,6 +1776,16 @@ class new_ extends Expression {
         out.println(Utilities.pad(n) + "_new");
 	dump_AbstractSymbol(out, n + 2, type_name);
 	dump_type(out, n);
+    }
+
+    public AbstractSymbol computeType(ClassTable classTable){
+        type = type_name;
+        if (classTable.isValidType(type_name))
+            return type_name; 
+        /* type not found */
+        classTable.reportError(this, classTable.ERROR_TYPE_NOT_DEF);
+        type = TreeConstants.No_type;
+        return type;
     }
 
 }
@@ -1435,6 +1820,12 @@ class isvoid extends Expression {
 	e1.dump_with_types(out, n + 2);
 	dump_type(out, n);
     }
+    
+    public AbstractSymbol computeType(ClassTable classTable){
+        AbstractSymbol expr_type = e1.computeType(classTable);
+        type = TreeConstants.Bool;
+        return type;
+    }
 
 }
 
@@ -1464,6 +1855,10 @@ class no_expr extends Expression {
 	dump_type(out, n);
     }
 
+    public AbstractSymbol computeType(ClassTable classTable){
+        type = TreeConstants.No_type;
+        return type;
+    }
 }
 
 
@@ -1495,6 +1890,23 @@ class object extends Expression {
         out.println(Utilities.pad(n) + "_object");
 	dump_AbstractSymbol(out, n + 2, name);
 	dump_type(out, n);
+    }
+
+    public AbstractSymbol computeType(ClassTable classTable){
+        /* Search in starting from inner most scope */
+        if (classTable.localVarToType.lookup(name) != null){
+            type = (AbstractSymbol) classTable.localVarToType.lookup(name);
+            return type;
+        }
+        /* Search among class attributes */
+        if (classTable.classToAttrMap.get(classTable.currClassName).containsKey(name)){
+            type = (AbstractSymbol) classTable.classToAttrMap.get(classTable.currClassName).get(name);
+            return type;
+        }
+        /* Object identifier not found */
+        classTable.reportError(this, classTable.ERROR_VAR_NOT_DEFINED);
+        type = TreeConstants.No_type;
+        return type;
     }
 
 }
