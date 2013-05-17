@@ -18,13 +18,13 @@ class C {
         --multiple layer nesting + redef of var + redef within let statement
         let z1 : Int <- 1, z2 : Int <- 2 in 
             let z3 : String <- "three", z3 : Int <- 3 in
-                z1 + z2 + z3 + z4  
+                z1 + z2 + z3 
     };
     m5(a : String) : String{
         a.concat(b)  -- redef of global var
     };
     -- nest let + case
-    m6(y : Int) : Int{
+    m6(y : Int) : Object{
         let z : Int <- 0 in 
             case 5+10 of
                 b : Int => a+b+y+z; -- finds something in all scopes
@@ -49,13 +49,13 @@ class E inherits D {
         f.m1() + a + c + d
     };
     m8(d : String) : Int{
-        m1 + m7()
+        m1() + m7()
     };
     m9(a : String, d : String) : String{
         f.m5(e).concat(d).concat(b).concat(e)  -- redef of global var
     };
     -- nest let + case
-    m10(a : String) : Int{
+    m10(a : String) : Object{
         let e : Int <- 0 in 
             case 5+10 of
                 s : String => b; -- make sure scoping in b stays in branch
@@ -63,12 +63,17 @@ class E inherits D {
                 o : Object => f <- self; -- testing self scope
             esac
     };
-    m11(y : Int) : Int{
+    m11(y : Int) : Object{
         case "hi" of
             y : Int => y;
             y : String => let y : Int in y; -- multiple redef
             y : Object => y;
         esac
     };
+};
+
+
+class Main {
+    main() : Object { new Object };
 };
 

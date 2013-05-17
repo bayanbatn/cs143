@@ -76,7 +76,7 @@ class Test inherits F {
         case new SELF_TYPE of
             x : Test => self;
             x : B => new SELF_TYPE;
-            x : SELF_TYPE => new Test;
+            x : F => new Test;
         esac
     };
     m12() : Object {

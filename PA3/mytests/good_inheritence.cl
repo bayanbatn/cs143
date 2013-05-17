@@ -8,4 +8,6 @@ class E inherits C {};
 class F inherits D {};
 class C {};
 
-class Main{};
+class Main{
+    main() : Object { new Object };
+};
