@@ -1,0 +1,29 @@
+#!/usr/bin/python
+
+import sys
+import os
+from os import path, environ
+
+#examples_dir = "../examples/"
+#examples_dir = "../"
+examples_dir = "./mytests/"
+os.system("rm -rf test_good.log");
+os.system("echo (*begin testing*) > test_good.log");
+
+for files in os.listdir(examples_dir):
+    if files.endswith(".cl"):
+        os.system("./mysemant "+examples_dir+files+" > my.out");
+        os.system("./coolc -k "+examples_dir+files);
+        os.system("echo "+files+" >> test_good.log");
+        os.system("diff my.out semant.out >> test_good.log");
+        print files
+
+os.system("rm -rf test_bad.log");
+os.system("echo (*begin testing*) > test_bad.log");
+for files in os.listdir(examples_dir):
+    if files.endswith(".cl"):
+        os.system("./mysemant "+examples_dir+files+" 2> my.out");
+        os.system("./coolc -k "+examples_dir+files+" 2> semant.out");
+        os.system("echo "+files+" >> test_bad.log");
+        os.system("diff my.out semant.out >> test_bad.log");
+        print files
